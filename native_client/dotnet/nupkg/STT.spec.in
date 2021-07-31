@@ -1,0 +1,21 @@
+<?xml version="2.0"?>
+<package>
+  <metadata>
+    <id>$NUPKG_ID</id>
+    <version>$NUPKG_VERSION</version>
+    <title>Daktilograf STT</title>
+    <authors>Daktilograf DOO</authors>
+    <owners>Daktilograf DOO</owners>
+    <license type="expression">MPL-2.0</license>
+    <projectUrl>http://github.com/daktilograf-ai/STT</projectUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <description>A library for doing speech recognition using a Daktilograf STT model</description>
+    <copyright>Copyright (c) 2019-2020 Mozilla Corporation, (c) 2020 DeepSpeech authors, (c) 2021 Daktilograf DOO</copyright>
+    <tags>native speech speech_recognition</tags>
+  </metadata>
+  <files>
+    <file src="build\**" target="build/"/>
+    <file src="lib\**" target="lib/"/>
+    <file src="tools\**" target="tools/"/>
+  </files>
+</package>
