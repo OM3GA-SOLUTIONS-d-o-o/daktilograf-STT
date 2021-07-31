@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Tool for playing (and augmenting) single samples or samples from Sample Databases (SDB files) and 🐸STT CSV files
+Tool for playing (and augmenting) single samples or samples from Sample Databases (SDB files) and Daktilograf STT CSV files
 Use "python3 play.py -h" for help
 """
 
