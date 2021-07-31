@@ -1,4 +1,4 @@
-This file contains a list of papers in chronological order that have been published using Daktilograf STT.
+This file contains a list of papers in chronological order that have been published using STT core tehnology.
 
 To appear
 ==========
