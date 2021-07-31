@@ -53,7 +53,7 @@ Links & Resources
    * - Type
      - Link
    * - 📰 **Documentation**
-     - `stt.readthedocs.io <https://daktilograf3.readthedocs.io>`_
+     - `daktilograf3.readthedocs.io <https://daktilograf3.readthedocs.io>`_
    * - 🚀 **Latest release with pre-trained models**
      - `see the latest release on GitHub <https://github.com/OM3GA-SOLUTIONS-d-o-o/daktilograf-V3-client/releases/latest>`_
    * - 🤝 **Contribution Guidelines**
