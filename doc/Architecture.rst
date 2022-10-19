@@ -4,10 +4,9 @@ Daktilograf STT Model
 Cilj ovog projekta je kreiranje jednostavnog, otvorenog i sveprisutnog engine-a za prepoznavanje govora u tekst.
 Jednostavnog u smislu da engine ne zahteva serversku strukturu za rad.
 Otvorenog u smislu da su kod i modeli objavljeni pod Mozilla Public Licencom. 
-Svobuhvatnog , u smslsu da engine može da radi na svim platformama i da se razvoja na brojnim jezicima. 
+Sveobuhvatnog , u smislu da engine može da radi na svim platformama i da se razvoja na brojnim jezicima. 
 
-Arhitektura engine-ea je originalno zamišljena  i predstavljena u publikaciji 
-`Deep Speech: Scaling up end-to-end speech recognition <http://arxiv.org/abs/1412.5567>`_.
+Arhitektura engine-a je originalno zamišljena  i predstavljena u publikaciji `Deep Speech: Scaling up end-to-end speech recognition <http://arxiv.org/abs/1412.5567>`_.
 Međutim, engine se trenutno u mnogo čemu razlikuje od prvobitno koncipiranog engine-a.
 Kor engine-a je rekurentna neuronska mreža (RNN) trenirana za unos govornih spektrograma i generisanje transkripcija teksta.
 

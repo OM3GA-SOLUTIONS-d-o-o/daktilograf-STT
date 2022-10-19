@@ -14,7 +14,7 @@ Daktilograf STT je testiran i u proizvodnji i u istraživanju.
    :maxdepth: 1
    :caption: Quick Reference
 
-  RAZVOJ
+ RAZVOJ
 
  TRENING_UVOD
 
@@ -41,7 +41,7 @@ Najbrži način da koristite unapred obučeni Daktilograf STT model je pomoću 
    :maxdepth: 1
    :caption: API Reference
 
-   Error-Codes
+   Kodovi grešaka
 
    C-API
 
