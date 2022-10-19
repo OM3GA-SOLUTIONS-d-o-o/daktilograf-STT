@@ -2,7 +2,7 @@ Daktilograf STT dokumentacija glavni fajl.
 
  Možete da prilagodite ovu datoteku u potpunosti, ali bi trebalo da sadrži direktivu `toctree` 
 
-.. image:: https://raw.githubusercontent.com/coqui-ai/STT/main/images/coqui-STT-logo-green.png
+.. image:: https://github.com/OM3GA-SOLUTIONS-d-o-o/daktilograf-V3-client/raw/main/images/dakt-stt-gh.png
   :alt: Daktilograf STT logo and wordmark
 
 **STT** (Daktilograf STT) je komplet open source deep learning alata za trening i primenu modela transkripcije govora u tekst.

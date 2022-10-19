@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-# Coqui STT documentation build configuration file, created by
+# Daktilograf STT documentation build configuration file, created by
 # sphinx-quickstart on Thu Feb  2 21:20:39 2017.
 #
 # This file is execfile()d with the current directory set to its
@@ -51,9 +51,9 @@ import semver
 
 # -- Project information -----------------------------------------------------
 
-project = "Coqui STT"
-copyright = "2021 Coqui GmbH, 2020 DeepSpeech authors, 2019-2020 Mozilla Corporation"
-author = "Coqui GmbH"
+project = "Daktilograf STT"
+copyright = "2022 OM3GA SOLUTIONS d.o.o, 2021 Coqui GmbH, 2020 DeepSpeech authors, 2019-2020 Mozilla Corporation"
+author = "OM3GA SOLUTIONS d.o.o"
 
 with open("../VERSION", "r") as ver:
     v = ver.read().strip()
@@ -137,8 +137,8 @@ add_module_names = False
 html_theme = "furo"
 
 html_theme_options = {
-    "light_logo": "coqui-STT-circle.png",
-    "dark_logo": "coqui-STT-circle.png",
+    "light_logo": "daktilograf-logo-circle.png",
+    "dark_logo": "daktilograf-logo-circle.png",
     "sidebar_hide_name": True,
 }
 
@@ -179,7 +179,7 @@ latex_elements = {
 # (source start file, target name, title,
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
-    (master_doc, "STT.tex", "Coqui STT Documentation", "Coqui GmbH", "manual"),
+    (master_doc, "STT.tex", "Daktilograf STT Documentation", "OM3GA SOLUTIONS d.o.o", "manual"),
 ]
 
 
@@ -187,7 +187,7 @@ latex_documents = [
 
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
-man_pages = [(master_doc, "stt", "Coqui STT Documentation", [author], 1)]
+man_pages = [(master_doc, "stt", "Daktilograf STT Documentation", [author], 1)]
 
 
 # -- Options for Texinfo output -------------------------------------------
@@ -199,10 +199,10 @@ texinfo_documents = [
     (
         master_doc,
         "STT",
-        "Coqui STT Documentation",
+        "Daktilograf STT Documentation",
         author,
         "STT",
-        "One line description of project.",
+        "STT project for Slavic languages.",
         "Miscellaneous",
     ),
 ]
@@ -212,5 +212,5 @@ texinfo_documents = [
 intersphinx_mapping = {"https://docs.python.org/": None}
 
 extlinks = {
-    "github": ("https://github.com/coqui-ai/STT/blob/v{}/%s".format(release), "%s")
+    "github": ("https://github.com/OM3GA-SOLUTIONS-d-o-o/daktilograf-V3-client/blob/v{}/%s".format(release), "%s")
 }
