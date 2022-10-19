@@ -32,8 +32,8 @@ package_native_client()
     -C ${tensorflow_dir}/bazel-bin/native_client/ generate_scorer_package \
     -C ${deepspeech_dir}/ LICENSE \
     -C ${deepspeech_dir}/native_client/ stt${PLATFORM_EXE_SUFFIX} \
-    -C ${deepspeech_dir}/native_client/ daktilograf-stt.h \
-    -C ${deepspeech_dir}/native_client/kenlm/ README.dakt \
+    -C ${deepspeech_dir}/native_client/ coqui-stt.h \
+    -C ${deepspeech_dir}/native_client/kenlm/ README.coqui \
     | ${XZ} > "${artifacts_dir}/${artifact_name}"
 }
 
@@ -65,9 +65,9 @@ package_native_client_ndk()
     -C ${deepspeech_dir}/native_client/libs/${arch_abi}/ libstt.so \
     -C ${tensorflow_dir}/bazel-bin/native_client/ generate_scorer_package \
     -C ${deepspeech_dir}/native_client/libs/${arch_abi}/ libc++_shared.so \
-    -C ${deepspeech_dir}/native_client/ daktilograf-stt.h \
+    -C ${deepspeech_dir}/native_client/ coqui-stt.h \
     -C ${deepspeech_dir}/ LICENSE \
-    -C ${deepspeech_dir}/native_client/kenlm/ README.daktilograf \
+    -C ${deepspeech_dir}/native_client/kenlm/ README.coqui \
     | ${XZ} > "${artifacts_dir}/${artifact_name}"
 }
 
