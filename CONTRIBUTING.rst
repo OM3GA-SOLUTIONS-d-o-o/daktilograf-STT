@@ -1,28 +1,25 @@
 Contribution guidelines
 =======================
 
-Welcome to the Daktilograf STT project! We are excited to see your interest, and appreciate your support!
+Welcome to the Daktilograf project! We are excited to see your interest, and appreciate your support!
 
-This repository is governed by the Contributor Covenant Code of Conduct. For more details, see the `CODE_OF_CONDUCT.md <CODE_OF_CONDUCT.md>`_.
 
 How to Make a Good Pull Request
 -------------------------------
 
-Here's some guidelines on how to make a good PR to Daktilograf STT.
+Here's some guidelines on how to make a good PR to Daktilograf Engine.
 
 Bug-fix PR
 ^^^^^^^^^^
 
-You've found a bug and you were able to squash it! Great job! Please write a short but clear commit message describing the bug, and how you fixed it. This makes review much easier. Also, please name your branch something related to the bug-fix.
+You've found a bug please write a short but clear commit message describing the bug, and how you fixed it. This makes review much easier. Also, please name your branch something related to the bug-fix.
 
 New Feature PR
 ^^^^^^^^^^^^^^
 
-You've made some core changes to Daktilograf STT, and you would like to share them back with the community -- great! First things first: if you're planning to add a feature (not just fix a bug or docs) let the Daktilograf STT team know ahead of time and get some feedback early. A quick check-in with the team can save time during code-review, and also ensure that your new feature fits into the project.
-
-The Daktilograf STT codebase is made of many connected parts. There is Python code for training Daktilograf STT, core C++ code for running inference on trained models, and multiple language bindings to the C++ core so you can use Daktilograf STT in your favorite language.
-
-Whenever you add a new feature to Daktilograf STT and what to contribute that feature back to the project, here are some things to keep in mind:
+You've made some core changes to Daktilograf, and you would like to share them back with the community -- great! First things first: if you're planning to add a feature (not just fix a bug or docs) let the Daktilograf team know ahead of time and get some feedback early. A quick check-in with the team can save time during code-review, and also ensure that your new feature fits into the project.
+The Daktilograf codebase is made of many connected parts. There is Python code for training Daktilograf, core C++ code for running inference on trained models, and multiple language bindings to the C++ core so you can use Daktilograf in your favorite language.
+Whenever you add a new feature to Daktilograf and what to contribute that feature back to the project, here are some things to keep in mind:
 
 1. You've made changes to the core C++ code. Core changes can have downstream effects on all parts of the Daktilograf STT project, so keep that in mind. You should minimally also make necessary changes to the C client (i.e. **args.h** and **client.cc**). The bindings for Python, Java, and Javascript are SWIG generated, and in the best-case scenario you won't have to worry about them. However, if you've added a whole new feature, you may need to make custom tweaks to those bindings, because SWIG may not automagically work with your new feature, especially if you've exposed new arguments. The bindings for .NET and Swift are not generated automatically. It would be best if you also made the necessary manual changes to these bindings as well. It is best to communicate with the core Daktilograf STT team and come to an understanding of where you will likely need to work with the bindings. They can't predict all the bugs you will run into, but they will have a good idea of how to plan for some obvious challenges.
 2. You've made changes to the Python code. Make sure you run a linter (described below).
