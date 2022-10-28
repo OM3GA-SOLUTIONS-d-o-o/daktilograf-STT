@@ -1,7 +1,7 @@
 import unittest
 
 import numpy as np
-from daktilograf_stt_training.util.helpers import (
+from coqui_stt_training.util.helpers import (
     ValueRange,
     get_value_range,
     pick_value_from_range,

@@ -3,9 +3,6 @@
 # Need devel version cause we need /usr/include/cudnn.h
 FROM nvidia/cuda:10.1-cudnn7-devel-ubuntu18.04
 
-ARG STT_REPO=https://github.com/daktilograf-ai/STT.git
-ARG STT_SHA=origin/main
-
 # >> START Install base software
 
 # Get basic packages
@@ -22,6 +19,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libbz2-dev \
         libboost-all-dev \
         libgsm1-dev \
+        libopusfile0 \
         libltdl-dev \
         liblzma-dev \
         libmagic-dev \
@@ -45,8 +43,9 @@ RUN update-alternatives --install /usr/bin/pip pip /usr/bin/pip3 1
 RUN update-alternatives --install /usr/bin/python python /usr/bin/python3 1
 
 # Install Bazel
-RUN curl -LO "https://github.com/bazelbuild/bazel/releases/download/3.1.0/bazel_3.1.0-linux-x86_64.deb"
-RUN dpkg -i bazel_*.deb
+RUN curl -LO "https://github.com/bazelbuild/bazelisk/releases/download/v1.10.1/bazelisk-linux-amd64" && \
+    mv bazelisk-linux-amd64 /usr/bin/bazel && \
+    chmod +x /usr/bin/bazel
 
 # Try and free some space
 RUN rm -rf /var/lib/apt/lists/*
@@ -112,12 +111,7 @@ RUN echo "build --spawn_strategy=standalone --genrule_strategy=standalone" \
 # << END Configure Bazel
 
 WORKDIR /
-
-RUN git clone --recursive $STT_REPO STT
-WORKDIR /STT
-RUN git checkout $STT_SHA
-RUN git submodule sync tensorflow/
-RUN git submodule update --init tensorflow/
+COPY . /STT/
 
 # >> START Build and bind
 
@@ -133,13 +127,11 @@ RUN ./configure
 # passing LD_LIBRARY_PATH is required cause Bazel doesn't pickup it from environment
 
 # Build STT
+
 RUN bazel build \
+	--verbose_failures \
 	--workspace_status_command="bash native_client/bazel_workspace_status_cmd.sh" \
-	--config=monolithic \
-	--config=cuda \
 	-c opt \
-	--copt=-O3 \
-	--copt="-D_GLIBCXX_USE_CXX11_ABI=0" \
 	--copt=-mtune=generic \
 	--copt=-march=x86-64 \
 	--copt=-msse \
@@ -148,13 +140,14 @@ RUN bazel build \
 	--copt=-msse4.1 \
 	--copt=-msse4.2 \
 	--copt=-mavx \
-	--copt=-fvisibility=hidden \
-	//native_client:libstt.so \
-	--verbose_failures \
-	--action_env=LD_LIBRARY_PATH=${LD_LIBRARY_PATH}
+	--config=noaws \
+	--config=nogcp \
+	--config=nohdfs \
+	--config=nonccl \
+	//native_client:libstt.so
 
 # Copy built libs to /STT/native_client
-RUN cp bazel-bin/native_client/libstt.so /STT/native_client/
+RUN cp bazel-bin/native_client/libstt.so bazel-bin/native_client/libkenlm.so /STT/native_client/
 
 # Build client.cc and install Python client and decoder bindings
 ENV TFDIR /STT/tensorflow
@@ -166,6 +159,8 @@ RUN make NUM_PROCESSES=$(nproc) stt
 
 WORKDIR /STT
 RUN cd native_client/python && make NUM_PROCESSES=$(nproc) bindings
+RUN pip3 install --upgrade pip
+RUN pip3 install -U pip setuptools wheel
 RUN pip3 install --upgrade native_client/python/dist/*.whl
 
 RUN cd native_client/ctcdecode && make NUM_PROCESSES=$(nproc) bindings

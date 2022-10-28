@@ -9,13 +9,12 @@ source $(dirname "$0")/build-utils.sh
 source $(dirname "$0")/tf-vars.sh
 
 BAZEL_TARGETS="
-//native_client:libstt.so
-//native_client:libkenlm.so
-//native_client:generate_scorer_package
+//native_client:stt_ios
+//native_client:kenlm_ios
+//native_client:stt_swift
 "
 
-BAZEL_BUILD_FLAGS="--config=elinux_armhf ${BAZEL_EXTRA_FLAGS}"
+BAZEL_BUILD_FLAGS="--config=ios_arm64 ${BAZEL_EXTRA_FLAGS}"
+SYSTEM_TARGET=
 
 do_bazel_build
-
-do_stt_binary_build

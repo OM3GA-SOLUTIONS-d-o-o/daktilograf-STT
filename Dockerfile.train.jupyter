@@ -1,6 +1,6 @@
-# This is a Dockerfile useful for training models with Daktilograf STT in Jupyter notebooks
+# This is a Dockerfile useful for training models with Coqui STT in Jupyter notebooks
 
-FROM ghcr.io/daktilograf-ai/stt-train:latest
+FROM ghcr.io/coqui-ai/stt-train:latest
 
 WORKDIR /code/notebooks
 

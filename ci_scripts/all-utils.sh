@@ -2,32 +2,10 @@
 
 set -xe
 
-set_ldc_sample_filename()
-{
-  local _bitrate=$1
-
-  if [ -z "${_bitrate}" ]; then
-    echo "Bitrate should not be empty"
-    exit 1
-  fi;
-
-  case "${_bitrate}" in
-    8k)
-      ldc93s1_sample_filename='LDC93S1_pcms16le_1_8000.wav'
-    ;;
-    16k)
-      ldc93s1_sample_filename='LDC93S1_pcms16le_1_16000.wav'
-    ;;
-  esac
-}
-
 download_model_prod()
 {
   local _model_source_file=$(basename "${model_source}")
   ${WGET} "${model_source}" -O - | gunzip --force > "${CI_TMP_DIR}/${_model_source_file}"
-
-  local _model_source_mmap_file=$(basename "${model_source_mmap}")
-  ${WGET} "${model_source_mmap}" -O - | gunzip --force > "${CI_TMP_DIR}/${_model_source_mmap_file}"
 }
 
 download_data()
@@ -43,33 +21,7 @@ download_material()
 {
   download_data
 
-  ls -hal ${CI_TMP_DIR}/${model_name} ${CI_TMP_DIR}/${model_name_mmap} ${CI_TMP_DIR}/LDC93S1*.wav
-}
-
-maybe_install_xldd()
-{
-  # -s required to avoid the noisy output like "Entering / Leaving directories"
-  toolchain=$(make -s -C ${DS_DSDIR}/native_client/ TARGET=${SYSTEM_TARGET} TFDIR=${DS_TFDIR} print-toolchain)
-  if [ ! -x "${toolchain}ldd" ]; then
-    cp "${DS_DSDIR}/native_client/xldd" "${toolchain}ldd" && chmod +x "${toolchain}ldd"
-  fi
-}
-
-# Checks whether we run a patched version of bazel.
-# Patching is required to dump computeKey() parameters to .ckd files
-# See bazel.patch
-# Return 0 (success exit code) on patched version, 1 on release version
-is_patched_bazel()
-{
-  bazel_version=$(bazel version | grep 'Build label:' | cut -d':' -f2)
-
-  bazel shutdown
-
-  if [ -z "${bazel_version}" ]; then
-    return 0;
-  else
-    return 1;
-  fi;
+  ls -hal ${CI_TMP_DIR}/${model_name} ${CI_TMP_DIR}/LDC93S1*.wav
 }
 
 verify_bazel_rebuild()

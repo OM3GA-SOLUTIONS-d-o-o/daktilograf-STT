@@ -1,7 +1,7 @@
 import os
 import unittest
 
-from daktilograf_stt_ctcdecoder import Alphabet
+from coqui_stt_ctcdecoder import Alphabet
 
 
 class TestAlphabetParsing(unittest.TestCase):

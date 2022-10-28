@@ -14,8 +14,10 @@ BAZEL_TARGETS="
 //native_client:generate_scorer_package
 "
 
-BAZEL_BUILD_FLAGS="--config=elinux_armhf ${BAZEL_EXTRA_FLAGS}"
+BAZEL_BUILD_FLAGS="--config=android_arm ${BAZEL_EXTRA_FLAGS}"
+SYSTEM_TARGET=
+SYSTEM_RASPBIAN=
 
 do_bazel_build
 
-do_stt_binary_build
+do_stt_ndk_build "armeabi-v7a"
