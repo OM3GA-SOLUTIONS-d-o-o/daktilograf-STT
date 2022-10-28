@@ -102,4 +102,4 @@ runs:
 
         echo "::set-output name=build::${NUMPY_BUILD_VERSION}"
         echo "::set-output name=dep::${NUMPY_DEP_VERSION}"
-      shell: bash
+      shell: msys2 {0}

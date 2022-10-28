@@ -1,4 +1,5 @@
 const core = require('@actions/core');
+const exec = require('@actions/exec');
 const github = require('@actions/github');
 const AdmZip = require('adm-zip');
 const filesize = require('filesize');
@@ -6,7 +7,8 @@ const pathname = require('path');
 const fs = require('fs');
 const { throttling } = require('@octokit/plugin-throttling');
 const { GitHub } = require('@actions/github/lib/utils');
-const Download = require('download');
+const Util = require('util');
+const Stream = require('stream');
 
 async function getGoodArtifacts(client, owner, repo, releaseId, name) {
     console.log(`==> GET /repos/${owner}/${repo}/releases/${releaseId}/assets`);
@@ -37,6 +39,7 @@ async function getGoodArtifacts(client, owner, repo, releaseId, name) {
 
 async function main() {
     try {
+        const token = core.getInput("github_token", { required: true });
         const [owner, repo] = core.getInput("repo", { required: true }).split("/");
         const path = core.getInput("path", { required: true });
         const name = core.getInput("name");
@@ -44,6 +47,7 @@ async function main() {
         const releaseTag = core.getInput("release-tag");
         const OctokitWithThrottling = GitHub.plugin(throttling);
         const client = new OctokitWithThrottling({
+            auth: token,
             throttle: {
                 onRateLimit: (retryAfter, options) => {
                     console.log(
@@ -54,6 +58,9 @@ async function main() {
                     if (options.request.retryCount <= 2) {
                         console.log(`Retrying after ${retryAfter} seconds!`);
                         return true;
+                    } else {
+                        console.log("Exhausted 2 retries");
+                        core.setFailed("Exhausted 2 retries");
                     }
                 },
                 onAbuseLimit: (retryAfter, options) => {
@@ -61,6 +68,7 @@ async function main() {
                     console.log(
                         `Abuse detected for request ${options.method} ${options.url}`
                     );
+                    core.setFailed(`GitHub REST API Abuse detected for request ${options.method} ${options.url}`)
                 },
             },
         });
@@ -88,21 +96,22 @@ async function main() {
             console.log("==> # artifacts:", goodArtifacts.length);
 
             const artifact = goodArtifacts[0];
-
             console.log("==> Artifact:", artifact.id)
 
             const size = filesize(artifact.size, { base: 10 })
+            console.log(`==> Downloading: ${artifact.name} (${size}) to path: ${path}`)
 
-            console.log("==> Downloading:", artifact.name, `(${size})`)
-
-            const dir = name ? path : pathname.join(path, artifact.name)
+            const dir = pathname.dirname(path)
+            console.log(`==> Creating containing dir if needed: ${dir}`)
             fs.mkdirSync(dir, { recursive: true })
 
-            await Download(artifact.url, dir, {
-                headers: {
-                    "Accept": "application/octet-stream",
-                },
-            });
+            await exec.exec('curl', [
+                '-L',
+                '-o', path,
+                '-H', 'Accept: application/octet-stream',
+                '-H', `Authorization: token ${token}`,
+                artifact.url
+            ])
         }
 
         if (artifactStatus === "missing" && download == "true") {

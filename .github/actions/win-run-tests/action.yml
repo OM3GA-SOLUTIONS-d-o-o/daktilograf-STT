@@ -32,4 +32,4 @@ runs:
         fi
 
         ${prefix}/ci_scripts/${{ inputs.runtime }}${build}-tests${model_kind}.sh ${{ inputs.samplerate }}
-      shell: bash
+      shell: msys2 {0}
