@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # ensure that you have downloaded the LDC dataset LDC97S62 and tar exists in a folder e.g.
 # ./data/swb/swb1_LDC97S62.tgz
-# from the Daktilograf STT directory run with: ./bin/import_swb.py ./data/swb/
+# from the Coqui STT directory run with: ./bin/import_swb.py ./data/swb/
 import codecs
 import fnmatch
 import os
@@ -16,7 +16,7 @@ import librosa
 import pandas
 import requests
 import soundfile  # <= Has an external dependency on libsndfile
-from daktilograf_stt_training.util.importers import validate_label_eng as validate_label
+from coqui_stt_training.util.importers import validate_label_eng as validate_label
 
 # ARCHIVE_NAME refers to ISIP alignments from 01/29/03
 ARCHIVE_NAME = "switchboard_word_alignments.tar.gz"
@@ -318,13 +318,13 @@ def get_sample_size(population_size):
     margin_of_error = 0.01
     fraction_picking = 0.50
     z_score = 2.58  # Corresponds to confidence level 99%
-    numerator = (z_score ** 2 * fraction_picking * (1 - fraction_picking)) / (
-        margin_of_error ** 2
+    numerator = (z_score**2 * fraction_picking * (1 - fraction_picking)) / (
+        margin_of_error**2
     )
     sample_size = 0
     for train_size in range(population_size, 0, -1):
-        denominator = 1 + (z_score ** 2 * fraction_picking * (1 - fraction_picking)) / (
-            margin_of_error ** 2 * train_size
+        denominator = 1 + (z_score**2 * fraction_picking * (1 - fraction_picking)) / (
+            margin_of_error**2 * train_size
         )
         sample_size = int(numerator / denominator)
         if 2 * sample_size + train_size <= population_size:

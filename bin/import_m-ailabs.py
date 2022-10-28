@@ -9,9 +9,9 @@ from glob import glob
 from multiprocessing import Pool
 
 import progressbar
-from daktilograf_stt_ctcdecoder import Alphabet
-from daktilograf_stt_training.util.downloader import SIMPLE_BAR, maybe_download
-from daktilograf_stt_training.util.importers import (
+from coqui_stt_ctcdecoder import Alphabet
+from coqui_stt_training.util.downloader import SIMPLE_BAR, maybe_download
+from coqui_stt_training.util.importers import (
     get_counter,
     get_imported_samples,
     get_importers_parser,
@@ -27,6 +27,8 @@ ARCHIVE_DIR_NAME = "{language}"
 ARCHIVE_NAME = "{language}.tgz"
 ARCHIVE_URL = "http://www.caito.de/data/Training/stt_tts/" + ARCHIVE_NAME
 
+_excluded_sentences = []
+
 
 def _download_and_preprocess_data(target_dir):
     # Making path absolute
@@ -37,6 +39,9 @@ def _download_and_preprocess_data(target_dir):
     _maybe_extract(target_dir, ARCHIVE_DIR_NAME, archive_path)
     # Produce CSV files
     _maybe_convert_sets(target_dir, ARCHIVE_DIR_NAME)
+
+    if SAVE_EXCLUDED_MAX_SEC_TO_DISK:
+        save_sentences_to_txt(_excluded_sentences, SAVE_EXCLUDED_MAX_SEC_TO_DISK)
 
 
 def _maybe_extract(target_dir, extracted_data, archive_path):
@@ -53,8 +58,13 @@ def _maybe_extract(target_dir, extracted_data, archive_path):
         print('Found directory "%s" - not extracting it from archive.' % archive_path)
 
 
+def save_sentences_to_txt(sentences, text_file):
+    with open(text_file, "w") as f:
+        f.write("\n".join(sentences))
+
+
 def one_sample(sample):
-    """ Take a audio file, and optionally convert it to 16kHz WAV """
+    """Take a audio file, and optionally convert it to 16kHz WAV"""
     wav_filename = sample[0]
     file_size = -1
     frames = 0
@@ -98,6 +108,8 @@ def one_sample(sample):
     elif frames / SAMPLE_RATE > MAX_SECS:
         # Excluding very long samples to keep a reasonable batch-size
         counter["too_long"] += 1
+        if SAVE_EXCLUDED_MAX_SEC_TO_DISK:
+            _excluded_sentences.append(str(label))
     else:
         # This one is good - keep it for the target CSV
         rows.append((wav_filename, file_size, label))
@@ -214,6 +226,11 @@ def handle_args():
     parser.add_argument(
         "--language", required=True, type=str, help="Dataset language to use"
     )
+    parser.add_argument(
+        "--save_excluded_max_sec_to_disk",
+        type=str,
+        help="Text file path to save excluded (max length) sentences to add them to the language model",
+    )
     return parser.parse_args()
 
 
@@ -221,6 +238,9 @@ if __name__ == "__main__":
     CLI_ARGS = handle_args()
     ALPHABET = Alphabet(CLI_ARGS.filter_alphabet) if CLI_ARGS.filter_alphabet else None
     SKIP_LIST = filter(None, CLI_ARGS.skiplist.split(","))
+
+    SAVE_EXCLUDED_MAX_SEC_TO_DISK = CLI_ARGS.save_excluded_max_sec_to_disk
+
     validate_label = get_validate_label(CLI_ARGS)
 
     def label_filter(label):

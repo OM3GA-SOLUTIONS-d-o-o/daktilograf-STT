@@ -10,7 +10,7 @@ import unicodedata
 import librosa
 import pandas
 import soundfile  # <= Has an external dependency on libsndfile
-from daktilograf_stt_training.util.importers import validate_label_eng as validate_label
+from coqui_stt_training.util.importers import validate_label_eng as validate_label
 
 # Prerequisite: Having the sph2pipe tool in your PATH:
 # https://www.ldc.upenn.edu/language-resources/tools/sphere-conversion-tools
@@ -264,13 +264,13 @@ def get_sample_size(population_size):
     margin_of_error = 0.01
     fraction_picking = 0.50
     z_score = 2.58  # Corresponds to confidence level 99%
-    numerator = (z_score ** 2 * fraction_picking * (1 - fraction_picking)) / (
-        margin_of_error ** 2
+    numerator = (z_score**2 * fraction_picking * (1 - fraction_picking)) / (
+        margin_of_error**2
     )
     sample_size = 0
     for train_size in range(population_size, 0, -1):
-        denominator = 1 + (z_score ** 2 * fraction_picking * (1 - fraction_picking)) / (
-            margin_of_error ** 2 * train_size
+        denominator = 1 + (z_score**2 * fraction_picking * (1 - fraction_picking)) / (
+            margin_of_error**2 * train_size
         )
         sample_size = int(numerator / denominator)
         if 2 * sample_size + train_size <= population_size:

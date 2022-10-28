@@ -8,13 +8,13 @@ import csv
 import decimal
 import hashlib
 import math
+import random
 import os
 import re
 import subprocess
 import sys
 import unicodedata
 import xml.etree.ElementTree as ET
-import zipfile
 from glob import glob
 from multiprocessing import Pool
 
@@ -23,23 +23,43 @@ import sox
 
 try:
     from num2words import num2words
-except ImportError as ex:
-    print("pip install num2words")
-    sys.exit(1)
+    import zipfile38 as zipfile
+except ImportError:
+    print("ERROR: This importer needs additional dependencies. To fix run:")
+    print("   python -m pip install num2words zipfile38")
+    raise
 
 import json
 
 import requests
-from daktilograf_stt_ctcdecoder import Alphabet
-from daktilograf_stt_training.util.downloader import SIMPLE_BAR, maybe_download
-from daktilograf_stt_training.util.helpers import secs_to_hours
-from daktilograf_stt_training.util.importers import (
+from coqui_stt_ctcdecoder import Alphabet
+from coqui_stt_training.util.downloader import SIMPLE_BAR, maybe_download
+from coqui_stt_training.util.helpers import secs_to_hours
+from coqui_stt_training.util.importers import (
     get_counter,
     get_imported_samples,
     get_importers_parser,
     get_validate_label,
     print_import_report,
 )
+
+try:
+    ffmpeg_path = (
+        subprocess.check_output(["which", "ffmpeg"], stderr=subprocess.STDOUT)
+        .decode()
+        .replace("\n", "")
+    )
+    if not ffmpeg_path:
+        raise subprocess.CalledProcessError
+    else:
+        print(f"Using FFMPEG from {str(ffmpeg_path)}.")
+except subprocess.CalledProcessError:
+    print("ERROR: This importer needs FFMPEG.")
+    print()
+    print("Type:")
+    print("$   apt-get update && apt-get install -y --no-install-recommends ffmpeg")
+    exit(1)
+
 
 FIELDNAMES = ["wav_filename", "wav_filesize", "transcript"]
 SAMPLE_RATE = 16000
@@ -211,6 +231,8 @@ DATASET_RELEASE_SHA = [
         "transcriptionsxml_audiomp3_mefr_ccpmf_2012-2020_2.zip.040",
     ),
 ]
+
+_excluded_sentences = []
 
 
 def _download_and_preprocess_data(csv_url, target_dir):
@@ -452,7 +474,7 @@ def maybe_normalize_for_specials_chars(label):
         "[end]", ""
     )  # broken tag in 20150123_Entretiens_Tresor_PGM_wmv_0_fre_minefi.xml
     label = label.replace(
-        u"\xB8c", " ç"
+        "\xB8c", " ç"
     )  # strange cedilla in 20150417_Printemps_Economie_2_wmv_0_fre_minefi.xml
     label = label.replace(
         "C0²", "CO 2"
@@ -473,6 +495,11 @@ def maybe_normalize(label):
     label = maybe_normalize_for_anglicisms(label)
     label = maybe_normalize_for_digits(label)
     return label
+
+
+def save_sentences_to_txt(sentences, text_file):
+    with open(text_file, "w") as f:
+        f.write("\n".join(sentences))
 
 
 def one_sample(sample):
@@ -525,7 +552,10 @@ def one_sample(sample):
     elif label is None:
         # Excluding samples that failed on label validation
         _counter["invalid_label"] += 1
-    elif int(frames / SAMPLE_RATE * 1000 / 10 / 2) < len(str(label)):
+    elif (
+        int(frames / SAMPLE_RATE * 1000 / 10 / 2) < len(str(label))
+        or file_size / len(str(label)) > 1400
+    ):
         # Excluding samples that are too short to fit the transcript
         _counter["too_short"] += 1
     elif frames / SAMPLE_RATE < MIN_SECS:
@@ -534,6 +564,8 @@ def one_sample(sample):
     elif frames / SAMPLE_RATE > MAX_SECS:
         # Excluding very long samples to keep a reasonable batch-size
         _counter["too_long"] += 1
+        if SAVE_EXCLUDED_MAX_SEC_TO_DISK:
+            _excluded_sentences.append(str(label))
     else:
         # This one is good - keep it for the target CSV
         _rows.append((os.path.join(dataset_basename, _wav_filename), file_size, label))
@@ -654,38 +686,103 @@ def _maybe_convert_wav(mp3_filename, _wav_filename):
 
 def write_general_csv(target_dir, _rows, _counter):
     target_csv_template = os.path.join(target_dir, "ccpmf_{}.csv")
-    with open(target_csv_template.format("train"), "w") as train_csv_file:  # 80%
-        with open(target_csv_template.format("dev"), "w") as dev_csv_file:  # 10%
-            with open(target_csv_template.format("test"), "w") as test_csv_file:  # 10%
-                train_writer = csv.DictWriter(train_csv_file, fieldnames=FIELDNAMES)
-                train_writer.writeheader()
-                dev_writer = csv.DictWriter(dev_csv_file, fieldnames=FIELDNAMES)
-                dev_writer.writeheader()
-                test_writer = csv.DictWriter(test_csv_file, fieldnames=FIELDNAMES)
-                test_writer.writeheader()
 
-                bar = progressbar.ProgressBar(max_value=len(_rows), widgets=SIMPLE_BAR)
-                for i, item in enumerate(bar(_rows)):
-                    i_mod = i % 10
-                    if i_mod == 0:
-                        writer = test_writer
-                    elif i_mod == 1:
-                        writer = dev_writer
-                    else:
-                        writer = train_writer
-                    writer.writerow(
-                        {
-                            "wav_filename": item[0],
-                            "wav_filesize": item[1],
-                            "transcript": item[2],
-                        }
-                    )
+    with open(target_csv_template.format("train"), "w") as train_csv_file, open(
+        target_csv_template.format("dev"), "w"
+    ) as dev_csv_file, open(target_csv_template.format("test"), "w") as test_csv_file:
+        train_writer = csv.DictWriter(train_csv_file, fieldnames=FIELDNAMES)
+        train_writer.writeheader()
+        dev_writer = csv.DictWriter(dev_csv_file, fieldnames=FIELDNAMES)
+        dev_writer.writeheader()
+        test_writer = csv.DictWriter(test_csv_file, fieldnames=FIELDNAMES)
+        test_writer.writeheader()
+
+        train_set, dev_set, test_set = _split_sets(_rows)
+
+        train_bar = progressbar.ProgressBar(
+            max_value=len(train_set), widgets=SIMPLE_BAR, description="Saving train set"
+        )
+        for item in train_bar(train_set):
+            train_writer.writerow(
+                {
+                    "wav_filename": item[0],
+                    "wav_filesize": item[1],
+                    "transcript": item[2],
+                }
+            )
+
+        dev_bar = progressbar.ProgressBar(
+            max_value=len(dev_set), widgets=SIMPLE_BAR, description="Saving dev set"
+        )
+        for item in dev_bar(dev_set):
+            dev_writer.writerow(
+                {
+                    "wav_filename": item[0],
+                    "wav_filesize": item[1],
+                    "transcript": item[2],
+                }
+            )
+
+        test_bar = progressbar.ProgressBar(
+            max_value=len(test_set), widgets=SIMPLE_BAR, description="Saving test set"
+        )
+        for item in test_bar(test_set):
+            test_writer.writerow(
+                {
+                    "wav_filename": item[0],
+                    "wav_filesize": item[1],
+                    "transcript": item[2],
+                }
+            )
 
     print("")
     print("~~~~ FINAL STATISTICS ~~~~")
     print_import_report(_counter, SAMPLE_RATE, MAX_SECS)
     print("~~~~ (FINAL STATISTICS) ~~~~")
     print("")
+
+
+def _split_sets(rows):
+    """
+    randomply split the datasets into train, validation, and test sets where the size of the
+    validation and test sets are determined by the `get_sample_size` function.
+    """
+    random.shuffle(rows)
+    sample_size = get_sample_size(len(rows))
+
+    train_beg = 0
+    train_end = len(rows) - 2 * sample_size
+
+    dev_beg = train_end
+    dev_end = train_end + sample_size
+
+    test_beg = dev_end
+    test_end = len(rows)
+
+    return (
+        rows[train_beg:train_end],
+        rows[dev_beg:dev_end],
+        rows[test_beg:test_end],
+    )
+
+
+def get_sample_size(population_size):
+    """calculates the sample size for a 99% confidence and 1% margin of error"""
+    margin_of_error = 0.01
+    fraction_picking = 0.50
+    z_score = 2.58  # Corresponds to confidence level 99%
+    numerator = (z_score**2 * fraction_picking * (1 - fraction_picking)) / (
+        margin_of_error**2
+    )
+    sample_size = 0
+    for train_size in range(population_size, 0, -1):
+        denominator = 1 + (z_score**2 * fraction_picking * (1 - fraction_picking)) / (
+            margin_of_error**2 * train_size
+        )
+        sample_size = int(numerator / denominator)
+        if 2 * sample_size + train_size <= population_size:
+            break
+    return sample_size
 
 
 if __name__ == "__main__":
@@ -702,8 +799,15 @@ if __name__ == "__main__":
         action="store_true",
         help="Converts diacritic characters to their base ones",
     )
-
+    PARSER.add_argument(
+        "--save_excluded_max_sec_to_disk",
+        type=str,
+        help="Text file path to save excluded (max length) sentences to add them to the language model",
+    )
     PARAMS = PARSER.parse_args()
+
+    SAVE_EXCLUDED_MAX_SEC_TO_DISK = PARAMS.save_excluded_max_sec_to_disk
+
     validate_label = get_validate_label(PARAMS)
     ALPHABET = Alphabet(PARAMS.filter_alphabet) if PARAMS.filter_alphabet else None
 
@@ -748,3 +852,6 @@ if __name__ == "__main__":
             all_counter += counter
             all_rows += rows
     write_general_csv(sources_root_dir, _counter=all_counter, _rows=all_rows)
+
+    if SAVE_EXCLUDED_MAX_SEC_TO_DISK:
+        save_sentences_to_txt(_excluded_sentences, SAVE_EXCLUDED_MAX_SEC_TO_DISK)

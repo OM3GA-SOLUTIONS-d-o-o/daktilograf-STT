@@ -6,8 +6,8 @@ import argparse
 import sys
 
 import numpy as np
-from daktilograf_stt_training.util.audio import AUDIO_TYPE_NP, mean_dbfs
-from daktilograf_stt_training.util.sample_collections import load_sample
+from coqui_stt_training.util.audio import AUDIO_TYPE_NP, mean_dbfs
+from coqui_stt_training.util.sample_collections import load_sample
 
 
 def fail(message):

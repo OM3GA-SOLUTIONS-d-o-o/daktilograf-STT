@@ -21,9 +21,9 @@ from multiprocessing.pool import ThreadPool
 
 import progressbar
 import sox
-from daktilograf_stt_ctcdecoder import Alphabet
-from daktilograf_stt_training.util.downloader import SIMPLE_BAR, maybe_download
-from daktilograf_stt_training.util.importers import validate_label_eng as validate_label
+from coqui_stt_ctcdecoder import Alphabet
+from coqui_stt_training.util.downloader import SIMPLE_BAR, maybe_download
+from coqui_stt_training.util.importers import validate_label_eng as validate_label
 
 SWC_URL = "https://www2.informatik.uni-hamburg.de/nats/pub/SWC/SWC_{language}.tar"
 SWC_ARCHIVE = "SWC_{language}.tar"
@@ -103,13 +103,13 @@ def get_sample_size(population_size):
     margin_of_error = 0.01
     fraction_picking = 0.50
     z_score = 2.58  # Corresponds to confidence level 99%
-    numerator = (z_score ** 2 * fraction_picking * (1 - fraction_picking)) / (
-        margin_of_error ** 2
+    numerator = (z_score**2 * fraction_picking * (1 - fraction_picking)) / (
+        margin_of_error**2
     )
     sample_size = 0
     for train_size in range(population_size, 0, -1):
-        denominator = 1 + (z_score ** 2 * fraction_picking * (1 - fraction_picking)) / (
-            margin_of_error ** 2 * train_size
+        denominator = 1 + (z_score**2 * fraction_picking * (1 - fraction_picking)) / (
+            margin_of_error**2 * train_size
         )
         sample_size = int(numerator / denominator)
         if 2 * sample_size + train_size <= population_size:

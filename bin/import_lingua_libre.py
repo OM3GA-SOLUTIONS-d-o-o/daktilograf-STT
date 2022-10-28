@@ -11,9 +11,9 @@ from multiprocessing import Pool
 
 import progressbar
 import sox
-from daktilograf_stt_ctcdecoder import Alphabet
-from daktilograf_stt_training.util.downloader import SIMPLE_BAR, maybe_download
-from daktilograf_stt_training.util.importers import (
+from coqui_stt_ctcdecoder import Alphabet
+from coqui_stt_training.util.downloader import SIMPLE_BAR, maybe_download
+from coqui_stt_training.util.importers import (
     get_counter,
     get_imported_samples,
     get_importers_parser,
@@ -57,7 +57,7 @@ def _maybe_extract(target_dir, extracted_data, archive_path):
 
 
 def one_sample(sample):
-    """ Take a audio file, and optionally convert it to 16kHz WAV """
+    """Take a audio file, and optionally convert it to 16kHz WAV"""
     ogg_filename = sample[0]
     # Storing wav files next to the ogg ones - just with a different suffix
     wav_filename = os.path.splitext(ogg_filename)[0] + ".wav"

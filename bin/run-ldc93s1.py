@@ -1,28 +1,26 @@
 #!/usr/bin/env python
 import os
 from import_ldc93s1 import _download_and_preprocess_data as download_ldc
-from daktilograf_stt_training.util.config import initialize_globals_from_args
-from daktilograf_stt_training.train import train, test, early_training_checks
-import tensorflow.compat.v1 as tfv1
+from coqui_stt_training.util.config import initialize_globals_from_args
+from coqui_stt_training.train import train
+from coqui_stt_training.evaluate import test
 
 # only one GPU for only one training sample
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
-download_ldc("data/ldc93s1")
+download_ldc("data/smoke_test")
 
 initialize_globals_from_args(
     load_train="init",
+    checkpoint_dir="ldc93s1_ckpt",
     alphabet_config_path="data/alphabet.txt",
-    train_files=["data/ldc93s1/ldc93s1.csv"],
-    dev_files=["data/ldc93s1/ldc93s1.csv"],
-    test_files=["data/ldc93s1/ldc93s1.csv"],
+    train_files=["data/smoke_test/ldc93s1.csv"],
+    dev_files=["data/smoke_test/ldc93s1.csv"],
+    test_files=["data/smoke_test/ldc93s1.csv"],
     augment=["time_mask"],
     n_hidden=100,
     epochs=200,
 )
 
-early_training_checks()
-
 train()
-tfv1.reset_default_graph()
 test()
