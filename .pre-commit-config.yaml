@@ -1,4 +1,4 @@
-exclude: '^(taskcluster|.github|native_client/kenlm|native_client/ctcdecode/third_party|tensorflow|kenlm|doc/examples|data/alphabet.txt)'
+exclude: '^(taskcluster|.github|native_client/kenlm|native_client/ctcdecode/third_party|tensorflow|kenlm|doc/examples|data/alphabet.txt|data/smoke_test)'
 repos:
   - repo: 'https://github.com/pre-commit/pre-commit-hooks'
     rev: v2.3.0
@@ -7,7 +7,7 @@ repos:
       - id: end-of-file-fixer
       - id: trailing-whitespace
   - repo: 'https://github.com/psf/black'
-    rev: 20.8b1
+    rev: "22.3.0"
     hooks:
       - id: black
         language_version: python3
