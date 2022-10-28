@@ -3,7 +3,7 @@ NODE_ABI_TARGET    ?=
 NODE_BUILD_VERBOSE ?= --verbose
 NPM_TOOL           ?= npm
 PROJECT_NAME       ?= stt
-PROJECT_VERSION    ?= $(shell cat ../../training/daktilograf_stt_training/VERSION | tr -d '\n')
+PROJECT_VERSION    ?= $(shell cat ../../training/coqui_stt_training/VERSION | tr -d '\n')
 NPM_ROOT           ?= $(shell npm root)
 
 NODE_PRE_GYP_ABI_CROSSWALK_FILE ?= $(NPM_ROOT)/../abi_crosswalk_priv.json
@@ -50,7 +50,7 @@ configure: stt_wrap.cxx package.json npm-dev
 	PATH="$(NODE_MODULES_BIN):${PATH}" $(NODE_BUILD_TOOL) configure $(NODE_BUILD_VERBOSE)
 
 build: configure stt_wrap.cxx
-	PATH="$(NODE_MODULES_BIN):${PATH}" NODE_PRE_GYP_ABI_CROSSWALK=$(NODE_PRE_GYP_ABI_CROSSWALK_FILE) AS=$(AS) CC=$(CC) CXX=$(CXX) LD=$(LD) CFLAGS="$(CFLAGS)" CXXFLAGS="$(CXXFLAGS)" LDFLAGS="$(RPATH_NODEJS) $(LDFLAGS)" LIBS=$(LIBS) $(NODE_BUILD_TOOL) $(NODE_PLATFORM_TARGET) $(NODE_RUNTIME) $(NODE_ABI_TARGET) $(NODE_DEVDIR) $(NODE_DIST_URL) --no-color rebuild $(NODE_BUILD_VERBOSE)
+	PATH="$(NODE_MODULES_BIN):${PATH}" NODE_PRE_GYP_ABI_CROSSWALK=$(NODE_PRE_GYP_ABI_CROSSWALK_FILE) AS=$(AS) CC=$(CC) CXX=$(CXX) LD=$(LD) CFLAGS="$(CFLAGS)" CXXFLAGS="$(CXXFLAGS)" LDFLAGS="$(RPATH_NODEJS) $(LDFLAGS)" LIBS="$(LIBS)" $(NODE_BUILD_TOOL) $(NODE_PLATFORM_TARGET) $(NODE_RUNTIME) $(NODE_ABI_TARGET) $(NODE_DEVDIR) $(NODE_DIST_URL) --no-color rebuild $(NODE_BUILD_VERBOSE)
 
 copy-deps: build
 	$(call copy_missing_libs,lib/binding/*/*/*/stt.node,lib/binding/*/*/)
@@ -63,3 +63,6 @@ npm-pack: clean package.json index.ts npm-dev
 
 stt_wrap.cxx: stt.i ds-swig
 	$(DS_SWIG_ENV) swig -c++ -javascript -node stt.i
+	# Hack: disable wrapping of constructors to avoid NodeJS 16.6 ABI compat break
+	sed -i.bak '/SetCallHandler/d' stt_wrap.cxx
+	rm stt_wrap.cxx.bak

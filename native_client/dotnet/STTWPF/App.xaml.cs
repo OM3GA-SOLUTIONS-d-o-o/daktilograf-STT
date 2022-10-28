@@ -20,7 +20,7 @@ namespace STTWPF
             {
                 //Register instance of STT
                 STTClient.STT client =
-                    new STTClient.STT("daktilograf-sr-F10.pbmm");
+                    new STTClient.STT("coqui-stt-0.8.0-models.pbmm");
 
                 SimpleIoc.Default.Register<ISTT>(() => client);
                 SimpleIoc.Default.Register<MainWindowViewModel>();

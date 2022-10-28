@@ -57,7 +57,7 @@ def maybe_rebuild(srcs, out_name, build_dir):
         )
 
 
-project_version = read("../../training/daktilograf_stt_training/VERSION").strip()
+project_version = read("../../training/coqui_stt_training/VERSION").strip()
 
 build_dir = "temp_build/temp_build"
 
@@ -70,11 +70,11 @@ third_party_build = "third_party.{}".format(archive_ext)
 ctc_decoder_build = "first_party.{}".format(archive_ext)
 
 
-maybe_rebuild(KENLM_FILES, third_party_build, build_dir)
+maybe_rebuild(THIRD_PARTY_FILES, third_party_build, build_dir)
 maybe_rebuild(CTC_DECODER_FILES, ctc_decoder_build, build_dir)
 
 decoder_module = Extension(
-    name="daktilograf_stt_ctcdecoder._swigwrapper",
+    name="coqui_stt_ctcdecoder._swigwrapper",
     sources=["swigwrapper.i"],
     swig_opts=["-c++", "-extranative"],
     language="c++",
@@ -94,12 +94,14 @@ class BuildExtFirst(build):
 
 
 setup(
-    name="daktilograf_stt_ctcdecoder",
+    name="coqui_stt_ctcdecoder",
     version=project_version,
-    description="""DS CTC decoder""",
+    description="Coqui STT Python decoder package.",
+    long_description="Documentation available at `stt.readthedocs.io <https://stt.readthedocs.io/en/latest/Decoder-API.html>`_",
+    long_description_content_type="text/x-rst; charset=UTF-8",
     cmdclass={"build": BuildExtFirst},
     ext_modules=[decoder_module],
-    package_dir={"daktilograf_stt_ctcdecoder": "."},
-    py_modules=["daktilograf_stt_ctcdecoder", "daktilograf_stt_ctcdecoder.swigwrapper"],
+    package_dir={"coqui_stt_ctcdecoder": "."},
+    py_modules=["coqui_stt_ctcdecoder", "coqui_stt_ctcdecoder.swigwrapper"],
     install_requires=["numpy%s" % numpy_min_ver],
 )

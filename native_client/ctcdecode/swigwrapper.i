@@ -20,11 +20,18 @@ import_array();
 
 namespace std {
     %template(StringVector) vector<string>;
+    %template(FloatVector) vector<float>;
     %template(UnsignedIntVector) vector<unsigned int>;
     %template(OutputVector) vector<Output>;
     %template(OutputVectorVector) vector<vector<Output>>;
+    %template(FlashlightOutputVector) vector<FlashlightOutput>;
+    %template(FlashlightOutputVectorVector) vector<vector<FlashlightOutput>>;
     %template(Map) unordered_map<string, float>;
+    %template(PathTriePtrVector) vector<PathTrie*>;
 }
+
+%ignore DecoderState::timestep_tree_root_;
+%ignore DecoderState::prefix_root_;
 
 %shared_ptr(Scorer);
 
@@ -32,26 +39,20 @@ namespace std {
 %apply (double* IN_ARRAY2, int DIM1, int DIM2) {(const double *probs, int time_dim, int class_dim)};
 %apply (double* IN_ARRAY3, int DIM1, int DIM2, int DIM3) {(const double *probs, int batch_size, int time_dim, int class_dim)};
 %apply (int* IN_ARRAY1, int DIM1) {(const int *seq_lengths, int seq_lengths_size)};
-%apply (unsigned int* IN_ARRAY1, int DIM1) {(const unsigned int *input, int length)};
+%apply (unsigned int* IN_ARRAY1, int DIM1) {(const unsigned int *indices, int length)};
 
 %ignore Scorer::dictionary;
 
+%include "third_party/flashlight/flashlight/lib/text/dictionary/Dictionary.h"
 %include "../alphabet.h"
 %include "output.h"
 %include "scorer.h"
+%include "path_trie.h"
 %include "ctc_beam_search_decoder.h"
 
 %constant const char* __version__ = ds_version();
 %constant const char* __git_version__ = ds_git_version();
 
-// Import only the error code enum definitions from daktilograf-stt.h
-// We can't just do |%ignore "";| here because it affects this file globally (even
-// files %include'd above). That causes SWIG to lose destructor information and
-// leads to leaks of the wrapper objects.
-// Instead we ignore functions and classes (structs), which are the only other
-// things in daktilograf-stt.h. If we add some new construct to daktilograf-stt.h we need
-// to update the ignore rules here to avoid exposing unwanted APIs in the decoder
-// package.
-%rename("$ignore", %$isfunction) "";
-%rename("$ignore", %$isclass) "";
-%include "../daktilograf-stt.h"
+// Import only the error code enum definitions from coqui-stt.h
+#define SWIG_ERRORS_ONLY
+%include "../coqui-stt.h"

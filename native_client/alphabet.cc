@@ -45,8 +45,8 @@ Alphabet::init(const char *config_file)
   if (!in) {
     return 1;
   }
-  unsigned int label = 0;
-  space_label_ = -2;
+  int index = 0;
+  space_index_ = -2;
   for (std::string line; getline_crossplatform(in, line);) {
     if (line.size() == 2 && line[0] == '\\' && line[1] == '#') {
       line = '#';
@@ -55,35 +55,68 @@ Alphabet::init(const char *config_file)
     }
     //TODO: we should probably do something more i18n-aware here
     if (line == " ") {
-      space_label_ = label;
+      space_index_ = index;
     }
     if (line.length() == 0) {
       continue;
     }
-    label_to_str_[label] = line;
-    str_to_label_[line] = label;
-    ++label;
+    addEntry(line, index);
+    ++index;
   }
-  size_ = label;
   in.close();
   return 0;
+}
+
+void
+Alphabet::InitFromLabels(const std::vector<std::string>& labels)
+{
+  space_index_ = -2;
+  for (int idx = 0; idx < labels.size(); ++idx) {
+    const std::string& label = labels[idx];
+    if (label == " ") {
+      space_index_ = idx;
+    }
+    addEntry(label, idx);
+  }
+}
+
+std::string
+Alphabet::SerializeText()
+{
+  std::stringstream out;
+
+  out << "# Each line in this file represents the Unicode codepoint (UTF-8 encoded)\n"
+      << "# associated with a numeric index.\n"
+      << "# A line that starts with # is a comment. You can escape it with \\# if you wish\n"
+      << "# to use '#' in the Alphabet.\n";
+
+  for (const std::string& label : GetLabels()) {
+    out << label << "\n";
+  }
+
+  out << "# The last (non-comment) line needs to end with a newline.\n";
+  return out.str();
 }
 
 std::string
 Alphabet::Serialize()
 {
+  // Should always be true in our usage, but this method will crash if for some
+  // mystical reason it doesn't hold, so defensively assert it here.
+  assert(isContiguous());
+
   // Serialization format is a sequence of (key, value) pairs, where key is
   // a uint16_t and value is a uint16_t length followed by `length` UTF-8
   // encoded bytes with the label.
   std::stringstream out;
 
   // We start by writing the number of pairs in the buffer as uint16_t.
-  uint16_t size = size_;
+  uint16_t size = entrySize();
   out.write(reinterpret_cast<char*>(&size), sizeof(size));
 
-  for (auto it = label_to_str_.begin(); it != label_to_str_.end(); ++it) {
-    uint16_t key = it->first;
-    string str = it->second;
+  for (int i = 0; i < GetSize(); ++i) {
+    uint16_t key = i;
+    string str = DecodeSingle(i);
     uint16_t len = str.length();
     // Then we write the key as uint16_t, followed by the length of the value
     // as uint16_t, followed by `length` bytes (the value itself).
@@ -105,7 +138,6 @@ Alphabet::Deserialize(const char* buffer, const int buffer_size)
   }
   uint16_t size = *(uint16_t*)(buffer + offset);
   offset += sizeof(uint16_t);
-  size_ = size;
 
   for (int i = 0; i < size; ++i) {
     if (buffer_size - offset < sizeof(uint16_t)) {
@@ -126,22 +158,36 @@ Alphabet::Deserialize(const char* buffer, const int buffer_size)
     std::string val(buffer+offset, val_len);
     offset += val_len;
 
-    label_to_str_[label] = val;
-    str_to_label_[val] = label;
+    addEntry(val, label);
 
     if (val == " ") {
-      space_label_ = label;
+      space_index_ = label;
     }
   }
 
   return 0;
 }
 
+size_t
+Alphabet::GetSize() const
+{
+  return entrySize();
+}
+
+std::vector<std::string>
+Alphabet::GetLabels() const
+{
+  std::vector<std::string> labels;
+  for (int idx = 0; idx < GetSize(); ++idx) {
+    labels.push_back(DecodeSingle(idx));
+  }
+  return labels;
+}
+
 bool
 Alphabet::CanEncodeSingle(const std::string& input) const
 {
-  auto it = str_to_label_.find(input);
-  return it != str_to_label_.end();
+  return contains(input);
 }
 
 bool
@@ -158,25 +204,14 @@ Alphabet::CanEncode(const std::string& input) const
 std::string
 Alphabet::DecodeSingle(unsigned int label) const
 {
-  auto it = label_to_str_.find(label);
-  if (it != label_to_str_.end()) {
-    return it->second;
-  } else {
-    std::cerr << "Invalid label " << label << std::endl;
-    abort();
-  }
+  assert(label <= INT_MAX);
+  return getEntry(label);
 }
 
 unsigned int
 Alphabet::EncodeSingle(const std::string& string) const
 {
-  auto it = str_to_label_.find(string);
-  if (it != str_to_label_.end()) {
-    return it->second;
-  } else {
-    std::cerr << "Invalid string " << string << std::endl;
-    abort();
-  }
+  return getIndex(string);
 }
 
 std::string

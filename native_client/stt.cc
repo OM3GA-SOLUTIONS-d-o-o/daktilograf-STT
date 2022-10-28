@@ -9,18 +9,12 @@
 #include <utility>
 #include <vector>
 
-#include "daktilograf-stt.h"
+#include "coqui-stt.h"
 #include "alphabet.h"
 #include "modelstate.h"
 
 #include "workspace_status.h"
-
-#ifndef USE_TFLITE
-#include "tfmodelstate.h"
-#else
 #include "tflitemodelstate.h"
-#endif // USE_TFLITE
-
 #include "ctcdecode/ctc_beam_search_decoder.h"
 
 #ifdef __ANDROID__
@@ -79,7 +73,7 @@ struct StreamingState {
   void feedAudioContent(const short* buffer, unsigned int buffer_size);
   char* intermediateDecode() const;
   Metadata* intermediateDecodeWithMetadata(unsigned int num_results) const;
-  void finalizeStream();
+  void flushBuffers(bool addZeroMfccVectors = false);
   char* finishStream();
   Metadata* finishStreamWithMetadata(unsigned int num_results);
 
@@ -146,14 +140,14 @@ StreamingState::intermediateDecodeWithMetadata(unsigned int num_results) const
 char*
 StreamingState::finishStream()
 {
-  finalizeStream();
+  flushBuffers(true);
   return model_->decode(decoder_state_);
 }
 
 Metadata*
 StreamingState::finishStreamWithMetadata(unsigned int num_results)
 {
-  finalizeStream();
+  flushBuffers(true);
   return model_->decode_metadata(decoder_state_, num_results);
 }
 
@@ -168,19 +162,22 @@ StreamingState::processAudioWindow(const vector<float>& buf)
 }
 
 void
-StreamingState::finalizeStream()
+StreamingState::flushBuffers(bool addZeroMfccVectors)
 {
   // Flush audio buffer
   processAudioWindow(audio_buffer_);
 
-  // Add empty mfcc vectors at end of sample
-  for (int i = 0; i < model_->n_context_; ++i) {
-    addZeroMfccWindow();
+  if (addZeroMfccVectors) {
+    // Add empty mfcc vectors at end of sample
+    for (int i = 0; i < model_->n_context_; ++i) {
+      addZeroMfccWindow();
+    }
   }
 
-  // Process final batch
+  // Process batch if there's inputs to be processed
   if (batch_buffer_.size() > 0) {
     processBatch(batch_buffer_, batch_buffer_.size()/model_->mfcc_feats_per_timestep_);
+    batch_buffer_.resize(0);
   }
 }
 
@@ -263,45 +260,56 @@ StreamingState::processBatch(const vector<float>& buf, unsigned int n_steps)
 }
 
 int
-STT_CreateModel(const char* aModelPath,
-               ModelState** retval)
+CreateModelImpl(const char* aModelString,
+                bool init_from_bytes,
+                ModelState** retval,
+                unsigned int aBufferSize = 0)
 {
   *retval = nullptr;
 
   std::cerr << "TensorFlow: " << tf_local_git_version() << std::endl;
-  std::cerr << " Daktilograf STT: " << ds_git_version() << std::endl;
+  std::cerr << " Coqui STT: " << ds_git_version() << std::endl;
 #ifdef __ANDROID__
   LOGE("TensorFlow: %s", tf_local_git_version());
   LOGD("TensorFlow: %s", tf_local_git_version());
-  LOGE(" Daktilograf STT: %s", ds_git_version());
-  LOGD(" Daktilograf STT: %s", ds_git_version());
+  LOGE(" Coqui STT: %s", ds_git_version());
+  LOGD(" Coqui STT: %s", ds_git_version());
 #endif
 
-  if (!aModelPath || strlen(aModelPath) < 1) {
+  if ((!init_from_bytes && !strlen(aModelString)) || (init_from_bytes && !aBufferSize)) {
     std::cerr << "No model specified, cannot continue." << std::endl;
     return STT_ERR_NO_MODEL;
   }
 
-  std::unique_ptr<ModelState> model(
-#ifndef USE_TFLITE
-    new TFModelState()
-#else
-    new TFLiteModelState()
-#endif
-  );
+  std::unique_ptr<ModelState> model(new TFLiteModelState());
 
   if (!model) {
     std::cerr << "Could not allocate model state." << std::endl;
     return STT_ERR_FAIL_CREATE_MODEL;
   }
 
-  int err = model->init(aModelPath);
+  int err = model->init(aModelString, init_from_bytes, aBufferSize);
   if (err != STT_ERR_OK) {
     return err;
   }
 
   *retval = model.release();
   return STT_ERR_OK;
+}
+
+int
+STT_CreateModel(const char* aModelPath,
+                ModelState** retval)
+{
+  return CreateModelImpl(aModelPath, false, retval);
+}
+
+int
+STT_CreateModelFromBuffer(const char* aModelBuffer,
+                          unsigned int aBufferSize,
+                          ModelState** retval)
+{
+  return CreateModelImpl(aModelBuffer, true, retval, aBufferSize);
 }
 
 unsigned int
@@ -330,16 +338,40 @@ STT_FreeModel(ModelState* ctx)
 }
 
 int
-STT_EnableExternalScorer(ModelState* aCtx,
-                        const char* aScorerPath)
+EnableExternalScorerImpl(ModelState* aCtx,
+                         const std::string& aPathOrBuffer,
+                         bool aInitFromBuffer)
 {
   std::unique_ptr<Scorer> scorer(new Scorer());
-  int err = scorer->init(aScorerPath, aCtx->alphabet_);
-  if (err != 0) {
+
+  int err;
+  if (aInitFromBuffer) {
+    err = scorer->init_from_buffer(aPathOrBuffer, aCtx->alphabet_);
+  } else {
+    err = scorer->init_from_filepath(aPathOrBuffer, aCtx->alphabet_);
+  }
+
+  if (err != STT_ERR_OK) {
     return STT_ERR_INVALID_SCORER;
   }
   aCtx->scorer_ = std::move(scorer);
   return STT_ERR_OK;
+}
+
+int
+STT_EnableExternalScorer(ModelState* aCtx,
+                         const char* aScorerPath)
+{
+  return EnableExternalScorerImpl(aCtx, aScorerPath, false);
+}
+
+int
+STT_EnableExternalScorerFromBuffer(ModelState* aCtx,
+                                   const char* aScorerBuffer,
+                                   unsigned int aBufferSize)
+{
+  std::string buffer(aScorerBuffer, aBufferSize);
+  return EnableExternalScorerImpl(aCtx, buffer, true);
 }
 
 int
@@ -462,6 +494,21 @@ Metadata*
 STT_IntermediateDecodeWithMetadata(const StreamingState* aSctx,
                                   unsigned int aNumResults)
 {
+  return aSctx->intermediateDecodeWithMetadata(aNumResults);
+}
+
+char*
+STT_IntermediateDecodeFlushBuffers(StreamingState* aSctx)
+{
+  aSctx->flushBuffers();
+  return aSctx->intermediateDecode();
+}
+
+Metadata*
+STT_IntermediateDecodeWithMetadataFlushBuffers(StreamingState* aSctx,
+                                               unsigned int aNumResults)
+{
+  aSctx->flushBuffers();
   return aSctx->intermediateDecodeWithMetadata(aNumResults);
 }
 

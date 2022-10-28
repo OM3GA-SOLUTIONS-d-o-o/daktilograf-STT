@@ -1,4 +1,4 @@
-#include "daktilograf-stt.h"
+#include "coqui-stt.h"
 #include <string.h>
 
 char*

@@ -10,9 +10,9 @@ using System.Windows;
 [assembly: AssemblyTitle("STT.WPF")]
 [assembly: AssemblyDescription("")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("Daktilograf DOO")]
+[assembly: AssemblyCompany("Coqui GmbH")]
 [assembly: AssemblyProduct("STT.WPF.SingleFiles")]
-[assembly: AssemblyCopyright("Copyright © 2018-2020 Mozilla, © 2021 Daktilograf DOO")]
+[assembly: AssemblyCopyright("Copyright © 2018-2020 Mozilla, © 2021 Coqui GmbH")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 

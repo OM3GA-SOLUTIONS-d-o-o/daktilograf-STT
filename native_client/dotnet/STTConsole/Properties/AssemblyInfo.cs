@@ -8,9 +8,9 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyTitle("STTConsole")]
 [assembly: AssemblyDescription("")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("Daktilograf DOO")]
+[assembly: AssemblyCompany("Coqui GmbH")]
 [assembly: AssemblyProduct("STTConsole")]
-[assembly: AssemblyCopyright("Copyright © 2018-2020 Mozilla, © 2021 Daktilograf DOO")]
+[assembly: AssemblyCopyright("Copyright © 2018-2020 Mozilla, © 2021 Coqui GmbH")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 

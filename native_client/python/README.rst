@@ -1,1 +1,1 @@
-Full project description and documentation on `https://daktilograf3.readthedocs.io/ <https://daktilograf3.readthedocs.io/>`_
+Full project description and documentation on `https://stt.readthedocs.io/ <https://stt.readthedocs.io/>`_

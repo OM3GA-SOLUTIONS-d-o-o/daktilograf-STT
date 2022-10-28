@@ -1,6 +1,9 @@
 #include "tflitemodelstate.h"
-#include "tensorflow/lite/string_util.h"
 #include "workspace_status.h"
+
+#include "tensorflow/lite/kernels/register.h"
+#include "tensorflow/lite/string_util.h"
+#include "tensorflow/lite/tools/evaluation/utils.h"
 
 #ifdef __ANDROID__
 #include <android/log.h>
@@ -156,23 +159,36 @@ getTfliteDelegates()
 }
 
 int
-TFLiteModelState::init(const char* model_path)
+TFLiteModelState::init(const char *model_string, bool init_from_bytes, size_t bufferSize)
 {
-  int err = ModelState::init(model_path);
+  int err = ModelState::init(model_string, init_from_bytes, bufferSize);
   if (err != STT_ERR_OK) {
     return err;
   }
 
-  fbmodel_ = tflite::FlatBufferModel::BuildFromFile(model_path);
-  if (!fbmodel_) {
-    std::cerr << "Error at reading model file " << model_path << std::endl;
-    return STT_ERR_FAIL_INIT_MMAP;
+  if (init_from_bytes) {
+    fbmodel_ = tflite::FlatBufferModel::BuildFromBuffer(model_string, bufferSize);
+    if (!fbmodel_) {
+      std::cerr << "Error at reading model buffer " << std::endl;
+      return STT_ERR_FAIL_INIT_MMAP;
+    }
+  } else {
+    fbmodel_ = tflite::FlatBufferModel::BuildFromFile(model_string);
+    if (!fbmodel_) {
+      std::cerr << "Error at reading model file " << model_string << std::endl;
+      return STT_ERR_FAIL_INIT_MMAP;
+    }
   }
 
   tflite::ops::builtin::BuiltinOpResolver resolver;
   tflite::InterpreterBuilder(*fbmodel_, resolver)(&interpreter_);
   if (!interpreter_) {
-    std::cerr << "Error at InterpreterBuilder for model file " << model_path << std::endl;
+    if (init_from_bytes) {
+      std::cerr << "Error at InterpreterBuilder for model buffer " << std::endl;
+    } else {
+      std::cerr << "Error at InterpreterBuilder for model file " << model_string << std::endl;
+    }
+
     return STT_ERR_FAIL_INTERPRETER;
   }
 
@@ -362,7 +378,7 @@ TFLiteModelState::infer(const vector<float>& mfcc,
   const size_t num_classes = alphabet_.GetSize() + 1; // +1 for blank
 
   // Feeding input_node
-  copy_vector_to_tensor(mfcc, input_node_idx_, n_frames*mfcc_feats_per_timestep_);
+  copy_vector_to_tensor(mfcc, input_node_idx_, n_steps_*mfcc_feats_per_timestep_);
 
   // Feeding previous_state_c, previous_state_h
   assert(previous_state_c.size() == state_size_);
@@ -393,7 +409,7 @@ TFLiteModelState::compute_mfcc(const vector<float>& samples,
                                vector<float>& mfcc_output)
 {
   // Feeding input_node
-  copy_vector_to_tensor(samples, input_samples_idx_, samples.size());
+  copy_vector_to_tensor(samples, input_samples_idx_, audio_win_len_);
 
   TfLiteStatus status = interpreter_->SetExecutionPlan(mfcc_exec_plan_);
   if (status != kTfLiteOk) {

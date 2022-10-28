@@ -33,7 +33,7 @@ def main():
         sys.argv.remove("--project_name")
         sys.argv.pop(project_name_idx)
 
-    with open("../../training/daktilograf_stt_training/VERSION", "r") as ver:
+    with open("../../training/coqui_stt_training/VERSION", "r") as ver:
         project_version = ver.read().strip()
 
     class BuildExtFirst(build):
@@ -86,19 +86,20 @@ def main():
         package_dir={"stt": "."},
         cmdclass={"build": BuildExtFirst},
         license="MPL-2.0",
-        url="https://github.com/daktilograf-ai/STT",
+        url="https://github.com/coqui-ai/STT",
         project_urls={
             "Documentation": "https://stt.readthedocs.io",
-            "Tracker": "https://github.com/daktilograf-ai/STT/issues",
-            "Repository": "https://github.com/daktilograf-ai/STT/tree/v{}".format(
+            "Tracker": "https://github.com/coqui-ai/STT/issues",
+            "Repository": "https://github.com/coqui-ai/STT/tree/v{}".format(
                 project_version
             ),
-            "Discussions": "https://github.com/daktilograf-ai/STT/discussions",
+            "Discussions": "https://github.com/coqui-ai/STT/discussions",
         },
         ext_modules=[ds_ext],
         py_modules=["stt", "stt.client", "stt.impl"],
         entry_points={"console_scripts": ["stt=stt.client:main"]},
         install_requires=["numpy%s" % numpy_min_ver],
+        python_requires=">=3.6,<3.11",
         include_package_data=True,
         classifiers=[
             "Development Status :: 3 - Alpha",

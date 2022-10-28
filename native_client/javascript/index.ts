@@ -62,7 +62,7 @@ export interface Metadata {
 }
 
 /**
- * Provides an interface to a Daktilograf STT stream. The constructor cannot be called
+ * Provides an interface to a Coqui STT stream. The constructor cannot be called
  * directly, use :js:func:`Model.createStream`.
  */
 class StreamImpl {
@@ -107,6 +107,26 @@ class StreamImpl {
     }
 
     /**
+     * EXPERIMENTAL: Compute the intermediate decoding of an ongoing streaming inference, flushing buffers first. This ensures that all audio that has been streamed so far is included in the result, but is more expensive than intermediateDecode() because buffers are processed through the acoustic model.
+     *
+     * @return The STT intermediate result.
+     */
+    intermediateDecodeFlushBuffers(): string {
+        return binding.IntermediateDecodeFlushBuffers(this._impl);
+    }
+
+    /**
+     * EXPERIMENTAL: Compute the intermediate decoding of an ongoing streaming inference, flushing buffers first. This ensures that all audio that has been streamed so far is included in the result, but is more expensive than intermediateDecodeWithMetadata() because buffers are processed through the acoustic model. Returns results including metadata.
+     *
+     * @param aNumResults Maximum number of candidate transcripts to return. Returned list might be smaller than this. Default value is 1 if not specified.
+     *
+     * @return :js:func:`Metadata` object containing multiple candidate transcripts. Each transcript has per-token metadata including timing information. The user is responsible for freeing Metadata by calling :js:func:`FreeMetadata`. Returns undefined on error.
+     */
+    intermediateDecodeWithMetadataFlushBuffers(aNumResults: number = 1): Metadata {
+        return binding.IntermediateDecodeWithMetadataFlushBuffers(this._impl, aNumResults);
+    }
+
+    /**
      * Compute the final decoding of an ongoing streaming inference and return the result. Signals the end of an ongoing streaming inference.
      *
      * @return The STT result.
@@ -142,21 +162,25 @@ class StreamImpl {
 export type Stream = StreamImpl;
 
 /**
- * An object providing an interface to a trained Daktilograf STT model.
+ * An object providing an interface to a trained Coqui STT model.
  */
 export class Model {
     /** @internal */
     _impl: any;
 
     /**
-     * @param aModelPath The path to the frozen model graph.
+     * @param aModelData Either the path to the frozen model graph or the frozen model's bytes.
+     * @param loadFromBytes Wheter to load the model from bytes or from a file.
      *
      * @throws on error
      */
-    constructor(aModelPath: string) {
+    constructor(aModelData: string | Uint8Array, loadFromBytes: boolean = false) {
         this._impl = null;
 
-        const [status, impl] = binding.CreateModel(aModelPath);
+        let status, impl;
+        if (loadFromBytes) [status, impl] = binding.CreateModelFromBuffer(aModelData);
+        else [status, impl] = binding.CreateModel(aModelData);
+
         if (status !== 0) {
             throw `CreateModel failed: ${binding.ErrorCodeToErrorMessage(status)} (0x${status.toString(16)})`;
         }
@@ -282,7 +306,7 @@ export class Model {
     }
 
     /**
-     * Use the Daktilograf STT model to perform Speech-To-Text.
+     * Use the Coqui STT model to perform Speech-To-Text.
      *
      * @param aBuffer A 16-bit, mono raw audio signal at the appropriate sample rate (matching what the model was trained on).
      *
@@ -293,7 +317,7 @@ export class Model {
     }
 
     /**
-     * Use the Daktilograf STT model to perform Speech-To-Text and output metadata
+     * Use the Coqui STT model to perform Speech-To-Text and output metadata
      * about the results.
      *
      * @param aBuffer A 16-bit, mono raw audio signal at the appropriate sample rate (matching what the model was trained on).

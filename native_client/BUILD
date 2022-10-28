@@ -1,36 +1,20 @@
-# Description: Daktilograf STT native client library.
+# Description: Coqui STT native client library.
 
-load("@org_tensorflow//tensorflow:tensorflow.bzl", "tf_cc_shared_object", "tf_copts", "lrt_if_needed")
-load("@local_config_cuda//cuda:build_defs.bzl", "if_cuda")
+load("@bazel_skylib//rules:common_settings.bzl", "string_flag")
+load("@org_tensorflow//tensorflow:tensorflow.bzl", "lrt_if_needed")
 load("@com_github_nelhage_rules_boost//:boost/boost.bzl", "boost_deps")
 load("@build_bazel_rules_apple//apple:ios.bzl", "ios_static_framework")
+load("@build_bazel_rules_swift//swift:swift.bzl", "swift_c_module", "swift_library")
+load("@emsdk//emscripten_toolchain:wasm_rules.bzl", "wasm_cc_binary")
 
-load(
-    "@org_tensorflow//tensorflow/lite:build_def.bzl",
-    "tflite_copts",
-    "tflite_linkopts",
-)
 
+# Only required until https://github.com/emscripten-core/emsdk/pull/1060
+# gets merged. Once that's done, we could use "@platform//cpu:wasm32".
 config_setting(
-    name = "tflite",
-    define_values = {
-        "runtime": "tflite",
-    },
+    name = "wasm_cpu",
+    values = {"cpu": "wasm"},
 )
 
-config_setting(
-    name = "rpi3",
-    define_values = {
-        "target_system": "rpi3"
-    },
-)
-
-config_setting(
-    name = "rpi3-armv8",
-    define_values = {
-        "target_system": "rpi3-armv8"
-    },
-)
 
 genrule(
     name = "workspace_status",
@@ -52,6 +36,31 @@ OPENFST_INCLUDES_PLATFORM = select({
     "//conditions:default": ["ctcdecode/third_party/openfst-1.6.7/src/include"],
 })
 
+DECODER_SOURCES = [
+    "alphabet.cc",
+    "alphabet.h",
+    "ctcdecode/ctc_beam_search_decoder.cpp",
+    "ctcdecode/ctc_beam_search_decoder.h",
+    "ctcdecode/decoder_utils.cpp",
+    "ctcdecode/decoder_utils.h",
+    "ctcdecode/path_trie.cpp",
+    "ctcdecode/path_trie.h",
+    "ctcdecode/scorer.cpp",
+    "ctcdecode/scorer.h",
+] + OPENFST_SOURCES_PLATFORM
+
+DECODER_INCLUDES = [
+    ".",
+    "ctcdecode/third_party/ThreadPool",
+    "ctcdecode/third_party/object_pool",
+] + OPENFST_INCLUDES_PLATFORM
+
+DECODER_LINKOPTS = [
+    "-lm",
+    "-ldl",
+    "-pthread",
+]
+
 LINUX_LINKOPTS = [
     "-ldl",
     "-pthread",
@@ -61,9 +70,11 @@ LINUX_LINKOPTS = [
 ]
 
 cc_library(
-    name = "kenlm",
+    name = "kenlm_static",
     srcs = glob([
+        "kenlm/lm/*.hh",
         "kenlm/lm/*.cc",
+        "kenlm/util/*.hh",
         "kenlm/util/*.cc",
         "kenlm/util/double-conversion/*.cc",
         "kenlm/util/double-conversion/*.h",
@@ -72,146 +83,204 @@ cc_library(
         "kenlm/*/*test.cc",
         "kenlm/*/*main.cc",
     ],),
-    hdrs = glob([
-        "kenlm/lm/*.hh",
-        "kenlm/util/*.hh",
-    ]),
-    copts = ["-std=c++11"],
+    copts = select({
+        "//tensorflow:windows": ["/std:c++14"],
+        "//conditions:default": ["-std=c++14", "-fwrapv", "-fvisibility=hidden"],
+    }),
     defines = ["KENLM_MAX_ORDER=6"],
     includes = ["kenlm"],
 )
 
-cc_library(
-    name = "decoder",
-    srcs = [
-        "ctcdecode/ctc_beam_search_decoder.cpp",
-        "ctcdecode/decoder_utils.cpp",
-        "ctcdecode/decoder_utils.h",
-        "ctcdecode/scorer.cpp",
-        "ctcdecode/path_trie.cpp",
-        "ctcdecode/path_trie.h",
-        "alphabet.cc",
-    ] + OPENFST_SOURCES_PLATFORM,
-    hdrs = [
-        "ctcdecode/ctc_beam_search_decoder.h",
-        "ctcdecode/scorer.h",
-        "ctcdecode/decoder_utils.h",
-        "alphabet.h",
-    ],
-    includes = [
-        ".",
-        "ctcdecode/third_party/ThreadPool",
-        "ctcdecode/third_party/object_pool",
-    ] + OPENFST_INCLUDES_PLATFORM,
-    deps = [":kenlm"],
-    linkopts = [
-        "-lm",
-        "-ldl",
-        "-pthread",
-    ],
+cc_binary(
+    name = "libkenlm.so",
+    deps = [":kenlm_static"],
+    linkopts = select({
+        "//tensorflow:ios": [
+            "-fembed-bitcode",
+            "-Wl,-install_name,@rpath/libkenlm.so",
+        ],
+        "//tensorflow:macos": [
+            "-Wl,-install_name,@rpath/libkenlm.so",
+        ],
+        "//tensorflow:windows": [],
+        "//conditions:default": [
+            "-Wl,-rpath,$$ORIGIN/",
+            "-Wl,-soname,libkenlm.so",
+        ],
+    }),
+    linkshared = 1,
+)
+
+cc_import(
+    name = "kenlm_import",
+    shared_library = ":libkenlm.so",
+    tags = ["manual"],
 )
 
 cc_library(
-    name = "daktilograf_stt_bundle",
+    name = "kenlm_lib",
+    hdrs = glob([
+        "kenlm/lm/*.hh",
+        "kenlm/util/*.hh",
+    ]),
+    deps = select({
+        # This needs to be linked statically when using WASM/Emscripten.
+        # This has licensing implications since KenLM is LGPL.
+        ":wasm_cpu": [":kenlm_static"],
+        # If not using emscripten, use dynamic linking.
+        "//conditions:default": [":kenlm_import"],
+    }),
+    copts = ["-std=c++14"],
+    defines = ["KENLM_MAX_ORDER=6"],
+    includes = [".", "kenlm"],
+)
+
+cc_library(
+    name = "flashlight",
+    hdrs = [
+        "ctcdecode/third_party/flashlight/flashlight/lib/common/String.h",
+        "ctcdecode/third_party/flashlight/flashlight/lib/common/System.h",
+        "ctcdecode/third_party/flashlight/flashlight/lib/text/decoder/Decoder.h",
+        "ctcdecode/third_party/flashlight/flashlight/lib/text/decoder/LexiconDecoder.h",
+        "ctcdecode/third_party/flashlight/flashlight/lib/text/decoder/LexiconFreeDecoder.h",
+        "ctcdecode/third_party/flashlight/flashlight/lib/text/decoder/lm/ConvLM.h",
+        "ctcdecode/third_party/flashlight/flashlight/lib/text/decoder/lm/KenLM.h",
+        "ctcdecode/third_party/flashlight/flashlight/lib/text/decoder/lm/LM.h",
+        "ctcdecode/third_party/flashlight/flashlight/lib/text/decoder/lm/ZeroLM.h",
+        "ctcdecode/third_party/flashlight/flashlight/lib/text/decoder/Trie.h",
+        "ctcdecode/third_party/flashlight/flashlight/lib/text/decoder/Utils.h",
+        "ctcdecode/third_party/flashlight/flashlight/lib/text/dictionary/Defines.h",
+        "ctcdecode/third_party/flashlight/flashlight/lib/text/dictionary/Dictionary.h",
+        "ctcdecode/third_party/flashlight/flashlight/lib/text/dictionary/Utils.h",
+    ],
+    srcs = [
+        "ctcdecode/third_party/flashlight/flashlight/lib/common/String.cpp",
+        "ctcdecode/third_party/flashlight/flashlight/lib/common/System.cpp",
+        "ctcdecode/third_party/flashlight/flashlight/lib/text/decoder/LexiconDecoder.cpp",
+        "ctcdecode/third_party/flashlight/flashlight/lib/text/decoder/LexiconFreeDecoder.cpp",
+        "ctcdecode/third_party/flashlight/flashlight/lib/text/decoder/lm/ConvLM.cpp",
+        "ctcdecode/third_party/flashlight/flashlight/lib/text/decoder/lm/KenLM.cpp",
+        "ctcdecode/third_party/flashlight/flashlight/lib/text/decoder/lm/ZeroLM.cpp",
+        "ctcdecode/third_party/flashlight/flashlight/lib/text/decoder/Trie.cpp",
+        "ctcdecode/third_party/flashlight/flashlight/lib/text/decoder/Utils.cpp",
+        "ctcdecode/third_party/flashlight/flashlight/lib/text/dictionary/Dictionary.cpp",
+        "ctcdecode/third_party/flashlight/flashlight/lib/text/dictionary/Utils.cpp",
+    ],
+    includes = ["ctcdecode/third_party/flashlight"],
+    deps = [":kenlm_lib"],
+)
+
+cc_library(
+    name = "decoder",
+    srcs = DECODER_SOURCES,
+    includes = DECODER_INCLUDES,
+    deps = [":kenlm_lib", ":flashlight"],
+    linkopts = DECODER_LINKOPTS,
+    copts = select({
+        "//tensorflow:windows": ["/std:c++14"],
+        "//conditions:default": ["-std=c++14", "-fexceptions", "-fwrapv"],
+    }),
+)
+
+cc_library(
+    name = "coqui_stt_bundle",
+    hdrs = [
+        "coqui-stt.h",
+    ],
     srcs = [
         "stt.cc",
-        "daktilograf-stt.h",
         "stt_errors.cc",
         "modelstate.cc",
         "modelstate.h",
         "workspace_status.cc",
         "workspace_status.h",
-    ] + select({
-        "//native_client:tflite": [
-            "tflitemodelstate.h",
-            "tflitemodelstate.cc",
-        ],
-        "//conditions:default": [
-            "tfmodelstate.h",
-            "tfmodelstate.cc",
-        ],
-    }),
-    copts = tf_copts() + select({
+        "tflitemodelstate.h",
+        "tflitemodelstate.cc",
+    ],
+    copts = select({
         # -fvisibility=hidden is not required on Windows, MSCV hides all declarations by default
-        "//tensorflow:windows": ["/w"],
+        "//tensorflow:windows": ["/std:c++14", "/w"],
         # -Wno-sign-compare to silent a lot of warnings from tensorflow itself,
         # which makes it harder to see our own warnings
         "//conditions:default": [
+            "-std=c++14",
+            "-fwrapv",
             "-Wno-sign-compare",
             "-fvisibility=hidden",
         ],
-    }) + select({
-        "//native_client:tflite": ["-DUSE_TFLITE"],
-        "//conditions:default": ["-UUSE_TFLITE"],
-    }) + tflite_copts(),
+    }),
     linkopts = lrt_if_needed() + select({
         "//tensorflow:macos": [],
         "//tensorflow:ios": ["-fembed-bitcode"],
         "//tensorflow:linux_x86_64": LINUX_LINKOPTS,
-        "//native_client:rpi3": LINUX_LINKOPTS,
-        "//native_client:rpi3-armv8": LINUX_LINKOPTS,
-        "//tensorflow:windows": [],
+        "//tensorflow:linux_armhf": LINUX_LINKOPTS,
+        "//tensorflow:linux_aarch64": LINUX_LINKOPTS,
+        # Bazel is has too strong opinions about static linking, so it's
+        # near impossible to get it to link a DLL against another DLL on Windows.
+        # We simply force the linker option manually here as a hacky fix.
+        "//tensorflow:windows": [
+            "bazel-out/x64_windows-opt/bin/native_client/libkenlm.so.if.lib",
+        ],
         "//conditions:default": [],
-    }) + tflite_linkopts(),
-    deps = select({
-        "//native_client:tflite": [
-            "//tensorflow/lite/kernels:builtin_ops",
-            "//tensorflow/lite/tools/evaluation:utils",
-        ],
-        "//conditions:default": [
-            "//tensorflow/core:core_cpu",
-            "//tensorflow/core:direct_session",
-            "//third_party/eigen3",
-            #"//tensorflow/core:all_kernels",
-            ### => Trying to be more fine-grained
-            ### Use bin/ops_in_graph.py to list all the ops used by a frozen graph.
-            ### CPU only build, libstt.so file size reduced by ~50%
-            "//tensorflow/core/kernels:spectrogram_op",  # AudioSpectrogram
-            "//tensorflow/core/kernels:bias_op",  # BiasAdd
-            "//tensorflow/core/kernels:cast_op",  # Cast
-            "//tensorflow/core/kernels:concat_op",  # ConcatV2
-            "//tensorflow/core/kernels:constant_op",  # Const, Placeholder
-            "//tensorflow/core/kernels:shape_ops",  # ExpandDims, Shape
-            "//tensorflow/core/kernels:gather_nd_op",  # GatherNd
-            "//tensorflow/core/kernels:identity_op",  # Identity
-            "//tensorflow/core/kernels:immutable_constant_op",  # ImmutableConst (used in memmapped models)
-            "//tensorflow/core/kernels:deepspeech_cwise_ops",  # Less, Minimum, Mul
-            "//tensorflow/core/kernels:matmul_op",  # MatMul
-            "//tensorflow/core/kernels:reduction_ops",  # Max
-            "//tensorflow/core/kernels:mfcc_op",  # Mfcc
-            "//tensorflow/core/kernels:no_op",  # NoOp
-            "//tensorflow/core/kernels:pack_op",  # Pack
-            "//tensorflow/core/kernels:sequence_ops",  # Range
-            "//tensorflow/core/kernels:relu_op",  # Relu
-            "//tensorflow/core/kernels:reshape_op",  # Reshape
-            "//tensorflow/core/kernels:softmax_op",  # Softmax
-            "//tensorflow/core/kernels:tile_ops",  # Tile
-            "//tensorflow/core/kernels:transpose_op",  # Transpose
-            "//tensorflow/core/kernels:rnn_ops",  # BlockLSTM
-            # And we also need the op libs for these ops used in the model:
-            "//tensorflow/core:audio_ops_op_lib",  # AudioSpectrogram, Mfcc
-            "//tensorflow/core:rnn_ops_op_lib",  # BlockLSTM
-            "//tensorflow/core:math_ops_op_lib",  # Cast, Less, Max, MatMul, Minimum, Range
-            "//tensorflow/core:array_ops_op_lib",  # ConcatV2, Const, ExpandDims, Fill, GatherNd, Identity, Pack, Placeholder, Reshape, Tile, Transpose
-            "//tensorflow/core:no_op_op_lib",  # NoOp
-            "//tensorflow/core:nn_ops_op_lib",  # Relu, Softmax, BiasAdd
-            # And op libs for these ops brought in by dependencies of dependencies to silence unknown OpKernel warnings:
-            "//tensorflow/core:dataset_ops_op_lib",  # UnwrapDatasetVariant, WrapDatasetVariant
-            "//tensorflow/core:sendrecv_ops_op_lib",  # _HostRecv, _HostSend, _Recv, _Send
-        ],
-    }) + if_cuda([
-        "//tensorflow/core:core",
-    ]) + [":decoder"],
+    }) + DECODER_LINKOPTS,
+    includes = DECODER_INCLUDES,
+    deps = [
+        ":decoder",
+        "//tensorflow/lite:framework_experimental",
+        "//tensorflow/lite/kernels:builtin_ops",
+        "//tensorflow/lite/tools/delegates:delegate_provider_lib",
+        "//tensorflow/lite/tools/evaluation:utils",
+    ],
 )
 
-tf_cc_shared_object(
+cc_binary(
     name = "libstt.so",
-    deps = [":daktilograf_stt_bundle"],
+    deps = [":coqui_stt_bundle"],
+    linkshared = 1,
+    linkopts = select({
+        "//tensorflow:ios": [
+            "-Wl,-install_name,@rpath/libstt.so",
+        ],
+        "//tensorflow:macos": [
+            "-Wl,-install_name,@rpath/libstt.so",
+        ],
+        "//tensorflow:windows": [],
+        "//conditions:default": [
+            "-Wl,-soname,libstt.so",
+        ],
+    }),
+)
+
+swift_c_module(
+    name = "stt_swift_native",
+    module_name = "STTNative",
+    module_map = "swift.modulemap",
+    deps = [":coqui_stt_bundle"],
+)
+
+swift_library(
+    name = "stt_swift",
+    deps = [":stt_swift_native"],
+    module_name = "STT",
+    srcs = [
+        "swift/Bindings.swift",
+    ],
 )
 
 ios_static_framework(
     name = "stt_ios",
-    deps = [":daktilograf_stt_bundle"],
+    bundle_name = "STT",
+    hdrs = ["coqui-stt.h"],
+    deps = [":coqui_stt_bundle"],
+    families = ["iphone", "ipad"],
+    minimum_os_version = "9.0",
+    linkopts = ["-lstdc++"],
+)
+
+ios_static_framework(
+    name = "kenlm_ios",
+    bundle_name = "KenLM",
+    deps = [":kenlm_static"],
     families = ["iphone", "ipad"],
     minimum_os_version = "9.0",
     linkopts = ["-lstdc++"],
@@ -231,7 +300,10 @@ cc_binary(
         "generate_scorer_package.cpp",
         "stt_errors.cc",
     ],
-    copts = ["-std=c++11"],
+    copts = select({
+        "//tensorflow:windows": ["/std:c++14"],
+        "//conditions:default": ["-std=c++14"],
+    }),
     deps = [
         ":decoder",
         "@com_google_absl//absl/flags:flag",
@@ -240,14 +312,19 @@ cc_binary(
         "@boost//:program_options",
     ],
     linkstatic = 1,
-    linkopts = [
-        "-lm",
-        "-ldl",
-        "-pthread",
-    ] + select({
+    linkopts = select({
         # ARMv7: error: Android 5.0 and later only support position-independent executables (-fPIE).
         "//tensorflow:android": ["-fPIE -pie"],
-        "//conditions:default": [],
+        # Bazel is has too strong opinions about static linking, so it's
+        # near impossible to get it to link a DLL against another DLL on Windows.
+        # We simply force the linker option manually here as a hacky fix.
+        "//tensorflow:windows": ["bazel-out/x64_windows-opt/bin/native_client/libkenlm.so.if.lib"],
+        "//conditions:default": [
+            "-lm",
+            "-ldl",
+            "-pthread",
+            "-Wl,-rpath,$$ORIGIN/",
+        ],
     }),
 )
 
@@ -256,16 +333,76 @@ cc_binary(
     srcs = [
         "enumerate_kenlm_vocabulary.cpp",
     ],
-    deps = [":kenlm"],
-    copts = ["-std=c++11"],
+    deps = [":kenlm_lib"],
+    copts = select({
+        "//tensorflow:windows": ["/std:c++14"],
+        "//conditions:default": ["-std=c++14"],
+    }),
 )
 
 cc_binary(
     name = "trie_load",
     srcs = [
-        "alphabet.h",
         "trie_load.cc",
     ],
-    copts = ["-std=c++11"],
     deps = [":decoder"],
+    copts = select({
+        "//tensorflow:windows": ["/std:c++14"],
+        "//conditions:default": ["-std=c++14"],
+    }),
+    linkopts = DECODER_LINKOPTS,
+)
+
+DECODER_LINKOPTS_WASM = DECODER_LINKOPTS + [
+    "-Os",
+    "--bind",
+    "-sWASM=1",
+    # Allow to grow memory allocation when needed (for example for loading models).
+    "-sALLOW_MEMORY_GROWTH",
+    "-sMAXIMUM_MEMORY=4GB",
+    "-sMALLOC=emmalloc",
+    "-sMODULARIZE=1",
+    "-sEXPORT_NAME=STT",
+    # We need to specify a threadpool size, otherwise TFLite will just do nothing
+    # and deadlock.
+    "-sPTHREAD_POOL_SIZE=4",
+    # This is a library, so no 'main' is expected.
+    "--no-entry",
+    # Experiencing problems? Uncomment the flags below to have better
+    # error messages and sanity checks.
+    # "-sASSERTIONS=2",
+    # "-g3",
+    # "-gsource-map",
+]
+
+string_flag(name = "wasm_emit", build_setting_default = "wasm_es5")
+
+config_setting(
+    name = "wasm_es6",
+    flag_values = {
+        ":wasm_emit": "es6",
+    }
+)
+
+cc_binary(
+    # Note that the .js suffix is significant here. See the `-o`
+    # option at https://emscripten.org/docs/tools_reference/emcc.html
+    name = "stt_wasm.js",
+    srcs = [
+        "wasm/bindings.cc",
+    ],
+    deps = [":decoder", ":coqui_stt_bundle"],
+    copts = ["-std=c++14", "-fno-exceptions", "-fwrapv", "-pthread"],
+    linkopts = select({
+        ":wasm_es6": DECODER_LINKOPTS_WASM + [
+            "-sEXPORT_ES6=1",
+            ],
+        "//conditions:default": DECODER_LINKOPTS_WASM,
+    }),
+)
+
+wasm_cc_binary(
+    name = "stt_wasm_bindings",
+    cc_target = ":stt_wasm.js",
+    simd = True,
 )

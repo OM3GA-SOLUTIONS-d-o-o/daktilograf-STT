@@ -8,7 +8,7 @@
 #endif
 #include <iostream>
 
-#include "daktilograf-stt.h"
+#include "coqui-stt.h"
 
 char* model = NULL;
 
@@ -34,6 +34,8 @@ bool extended_metadata = false;
 
 bool json_output = false;
 
+bool init_from_array_of_bytes = false;
+
 int json_candidate_transcripts = 3;
 
 int stream_size = 0;
@@ -47,7 +49,7 @@ void PrintHelp(const char* bin)
     std::cout <<
     "Usage: " << bin << " --model MODEL [--scorer SCORER] --audio AUDIO [-t] [-e]\n"
     "\n"
-    "Running Daktilograf STT inference.\n"
+    "Running Coqui STT inference.\n"
     "\n"
     "\t--model MODEL\t\t\tPath to the model (protocol buffer binary file)\n"
     "\t--scorer SCORER\t\t\tPath to the external scorer file\n"
@@ -62,10 +64,11 @@ void PrintHelp(const char* bin)
     "\t--stream size\t\t\tRun in stream mode, output intermediate results\n"
     "\t--extended_stream size\t\t\tRun in stream mode using metadata output, output intermediate results\n"
     "\t--hot_words\t\t\tHot-words and their boosts. Word:Boost pairs are comma-separated\n"
+    "\t--init_from_bytes\t\tTest init model and scorer from array of bytes\n"
     "\t--help\t\t\t\tShow help\n"
     "\t--version\t\t\tPrint version and exits\n";
     char* version = STT_Version();
-    std::cerr << "Daktilograf STT " << version << "\n";
+    std::cerr << "Coqui STT " << version << "\n";
     STT_FreeString(version);
     exit(1);
 }
@@ -83,6 +86,7 @@ bool ProcessArgs(int argc, char** argv)
             {"t", no_argument, nullptr, 't'},
             {"extended", no_argument, nullptr, 'e'},
             {"json", no_argument, nullptr, 'j'},
+            {"init_from_bytes", no_argument, nullptr, 'B'},
             {"candidate_transcripts", required_argument, nullptr, 150},
             {"stream", required_argument, nullptr, 's'},
             {"extended_stream", required_argument, nullptr, 'S'},
@@ -140,6 +144,10 @@ bool ProcessArgs(int argc, char** argv)
             json_output = true;
             break;
 
+        case 'B':
+            init_from_array_of_bytes = true;
+            break;
+
         case 150:
             json_candidate_transcripts = atoi(optarg);
             break;
@@ -170,7 +178,7 @@ bool ProcessArgs(int argc, char** argv)
 
     if (has_versions) {
         char* version = STT_Version();
-        std::cout << "Daktilograf " << version << "\n";
+        std::cout << "Coqui " << version << "\n";
         STT_FreeString(version);
         return false;
     }

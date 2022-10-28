@@ -5,7 +5,7 @@
 #define SWIG_FILE_WITH_INIT
 #include <string.h>
 #include <node_buffer.h>
-#include "daktilograf-stt.h"
+#include "coqui-stt.h"
 
 using namespace v8;
 using namespace node;
@@ -28,13 +28,15 @@ using namespace node;
 
 // apply to STT_FeedAudioContent and STT_SpeechToText
 %apply (short* IN_ARRAY1, int DIM1) {(const short* aBuffer, unsigned int aBufferSize)};
-
+// apply the buffer typemap to STT_CreateModelFromBuffer
+%apply (short* IN_ARRAY1, int DIM1) {(const char *aModelBuffer, unsigned int aBufferSize)};
 
 // make sure the string returned by SpeechToText is freed
 %typemap(newfree) char* "STT_FreeString($1);";
 
 %newobject STT_SpeechToText;
 %newobject STT_IntermediateDecode;
+%newobject STT_IntermediateDecodeFlushBuffers;
 %newobject STT_FinishStream;
 %newobject STT_Version;
 %newobject STT_ErrorCodeToErrorMessage;
@@ -95,4 +97,4 @@ using namespace node;
 
 %rename ("%(strip:[STT_])s") "";
 
-%include "../daktilograf-stt.h"
+%include "../coqui-stt.h"

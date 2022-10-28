@@ -3,13 +3,13 @@
 
 #include <vector>
 
-#include "daktilograf-stt.h"
+#include "coqui-stt.h"
 #include "alphabet.h"
 
 #include "ctcdecode/scorer.h"
 #include "ctcdecode/output.h"
 
-class DecoderState;
+struct DecoderState;
 
 struct ModelState {
   //TODO: infer batch size from model/use dynamic batch size
@@ -31,7 +31,7 @@ struct ModelState {
   ModelState();
   virtual ~ModelState();
 
-  virtual int init(const char* model_path);
+  virtual int init(const char* model_string, bool init_from_bytes, size_t bufferSize);
 
   virtual void compute_mfcc(const std::vector<float>& audio_buffer, std::vector<float>& mfcc_output) = 0;
 

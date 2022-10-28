@@ -1,14 +1,15 @@
 {
     "name" : "$(PROJECT_NAME)",
     "version" : "$(PROJECT_VERSION)",
-    "description" : "A library for doing speech recognition using a Daktilograf STT model",
+    "description" : "A library for doing speech recognition using a Coqui STT model",
     "main" : "./index.js",
     "types": "./index.d.ts",
     "bin": {
        "stt": "./client.js"
     },
-    "author" : "Daktilograf DOO",
+    "author" : "Coqui GmbH",
     "license": "MPL-2.0",
+    "homepage": "https://github.com/coqui-ai/STT",
     "files": [
        "README.md",
        "client.js",
@@ -16,6 +17,12 @@
        "index.d.ts",
        "lib/*"
     ],
+    "bugs": {
+       "url": "https://github.com/coqui-ai/STT/issues"
+    },
+    "repository"   :  {
+       "type" : "git",
+       "url"  : "git://github.com/coqui-ai/STT.git"
     },
     "binary": {
         "module_name" : "stt",

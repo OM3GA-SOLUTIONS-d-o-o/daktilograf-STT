@@ -54,9 +54,9 @@ namespace CSharpExamples
                 Console.WriteLine("Loading model...");
                 stopwatch.Start();
                 // sphinx-doc: csharp_ref_model_start
-                using (ISTT sttClient = new STT(model ?? "output_graph.pbmm"))
+                using (ISTT sttClient = new STT(model ?? "model.tflite"))
                 {
-                // sphinx-doc: csharp_ref_model_stop
+                    // sphinx-doc: csharp_ref_model_stop
                     stopwatch.Stop();
 
                     Console.WriteLine($"Model loaded - {stopwatch.Elapsed.Milliseconds} ms");
@@ -64,17 +64,17 @@ namespace CSharpExamples
                     if (scorer != null)
                     {
                         Console.WriteLine("Loading scorer...");
-                        sttClient.EnableExternalScorer(scorer ?? "kenlm.scorer");
+                        sttClient.EnableExternalScorer(scorer ?? "huge-vocabulary.scorer");
                     }
 
-                    if(hotwords != null)
+                    if (hotwords != null)
                     {
                         Console.WriteLine($"Adding hot-words {hotwords}");
-                        char[] sep = {','};
+                        char[] sep = { ',' };
                         string[] word_boosts = hotwords.Split(sep);
-                        foreach(string word_boost in word_boosts)
+                        foreach (string word_boost in word_boosts)
                         {
-                            char[] sep1 = {':'};
+                            char[] sep1 = { ':' };
                             string[] word = word_boost.Split(sep1);
                             sttClient.AddHotWord(word[0], float.Parse(word[1]));
                         }

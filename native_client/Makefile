@@ -34,7 +34,7 @@ install: $(STT_BIN)
 	install -d ${PREFIX}/lib
 	install -m 0644 ${TFDIR}/bazel-bin/native_client/libstt.so ${PREFIX}/lib/
 	install -d ${PREFIX}/include
-	install -m 0644 daktilograf-stt.h ${PREFIX}/include
+	install -m 0644 coqui-stt.h ${PREFIX}/include
 	install -d ${PREFIX}/bin
 	install -m 0755 stt ${PREFIX}/bin/
 

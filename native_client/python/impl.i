@@ -2,7 +2,7 @@
 
 %{
 #define SWIG_FILE_WITH_INIT
-#include "daktilograf-stt.h"
+#include "coqui-stt.h"
 %}
 
 %include "numpy.i"
@@ -119,10 +119,11 @@ static PyObject *parent_reference() {
 
 %newobject STT_SpeechToText;
 %newobject STT_IntermediateDecode;
+%newobject STT_IntermediateDecodeFlushBuffers;
 %newobject STT_FinishStream;
 %newobject STT_Version;
 %newobject STT_ErrorCodeToErrorMessage;
 
 %rename ("%(strip:[STT_])s") "";
 
-%include "../daktilograf-stt.h"
+%include "../coqui-stt.h"

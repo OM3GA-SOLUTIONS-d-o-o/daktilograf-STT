@@ -1,5 +1,5 @@
 This file contains some notes on coding style within the C++ portion of the
-Daktilograf STT project. It is very much a work in progress and incomplete.
+🐸STT project. It is very much a work in progress and incomplete.
 
 General
 =======

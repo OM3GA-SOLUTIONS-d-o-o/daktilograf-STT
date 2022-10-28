@@ -1,6 +1,7 @@
 NC_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 
 TARGET    ?= host
+ROOT_DIR  ?= $(abspath $(NC_DIR)/..)
 TFDIR     ?= $(abspath $(NC_DIR)/../tensorflow)
 PREFIX    ?= /usr/local
 SO_SEARCH ?= $(TFDIR)/bazel-bin/
@@ -20,38 +21,30 @@ endif
 
 STT_BIN       := stt$(PLATFORM_EXE_SUFFIX)
 CFLAGS_STT    := -std=c++11 -o $(STT_BIN)
-LINK_STT      := -lstt
-LINK_PATH_STT := -L${TFDIR}/bazel-bin/native_client
+LINK_STT      := -lstt -lkenlm
+LINK_PATH_STT := -L${TFDIR}/bazel-bin/native_client -L${TFDIR}/bazel-bin/tensorflow/lite
 
 ifeq ($(TARGET),host)
 TOOLCHAIN       :=
 CFLAGS          :=
 CXXFLAGS        :=
 LDFLAGS         :=
-SOX_CFLAGS      := `pkg-config --cflags sox`
+SOX_CFLAGS      := -I$(ROOT_DIR)/sox-build/include
 ifeq ($(OS),Linux)
-MAGIC_LINK_LZMA := $(shell objdump -tTC /usr/lib/`uname -m`-linux-gnu/libmagic.so | grep lzma | grep '*UND*' | wc -l)
-ifneq ($(MAGIC_LINK_LZMA),0)
-MAYBE_LINK_LZMA := -llzma
-endif # MAGIC_LINK_LZMA
-MAGIC_LINK_BZ2  := $(shell objdump -tTC /usr/lib/`uname -m`-linux-gnu/libmagic.so | grep BZ2 | grep '*UND*' | wc -l)
-ifneq ($(MAGIC_LINK_BZ2),0)
-MAYBE_LINK_BZ2  := -lbz2
-endif # MAGIC_LINK_BZ2
-SOX_CFLAGS      += -fopenmp
-SOX_LDFLAGS     := -Wl,-Bstatic `pkg-config --static --libs sox` -lgsm `pkg-config --static --libs libpng | cut -d' ' -f1` -lz -lmagic $(MAYBE_LINK_LZMA) $(MAYBE_LINK_BZ2) -lltdl -Wl,-Bdynamic -ldl
+LINK_STT := $(LINK_STT) -llzma -lbz2
+SOX_LDFLAGS     := -L$(ROOT_DIR)/sox-build/lib -lsox
 else ifeq ($(OS),Darwin)
-LIBSOX_PATH             := $(shell echo `pkg-config --libs-only-L sox | sed -e 's/^-L//'`/lib`pkg-config --libs-only-l sox | sed -e 's/^-l//'`.dylib)
-LIBOPUSFILE_PATH        := $(shell echo `pkg-config --libs-only-L opusfile | sed -e 's/^-L//'`/lib`pkg-config --libs-only-l opusfile | sed -e 's/^-l//'`.dylib)
-LIBSOX_STATIC_DEPS      := $(shell echo `otool -L $(LIBSOX_PATH) | tail -n +2 | cut -d' ' -f1 | grep /opt/ | sed -E "s/\.[[:digit:]]+\.dylib/\.a/" | tr '\n' ' '`)
-LIBOPUSFILE_STATIC_DEPS := $(shell echo `otool -L $(LIBOPUSFILE_PATH) | tail -n +2 | cut -d' ' -f1 | grep /opt/ | sed -E "s/\.[[:digit:]]+\.dylib/\.a/" | tr '\n' ' '`)
-SOX_LDFLAGS             := $(LIBSOX_STATIC_DEPS) $(LIBOPUSFILE_STATIC_DEPS) -framework CoreAudio -lz
+CFLAGS                  := -mmacosx-version-min=10.10 -target x86_64-apple-macos10.10
+LDFLAGS                 := -mmacosx-version-min=10.10 -target x86_64-apple-macos10.10
+
+SOX_CFLAGS              := $(shell pkg-config --cflags sox)
+SOX_LDFLAGS             := $(shell pkg-config --libs sox) -framework CoreAudio -lz
 else
 SOX_LDFLAGS     := `pkg-config --libs sox`
 endif # OS others
 PYTHON_PACKAGES := numpy${NUMPY_BUILD_VERSION}
 ifeq ($(OS),Linux)
-PYTHON_PLATFORM_NAME ?= --plat-name manylinux1_x86_64
+PYTHON_PLATFORM_NAME ?= --plat-name manylinux_2_24_x86_64
 endif
 endif
 
@@ -61,7 +54,7 @@ TOOL_CC     := cl.exe
 TOOL_CXX    := cl.exe
 TOOL_LD     := link.exe
 TOOL_LIBEXE := lib.exe
-LINK_STT      := $(TFDIR)\bazel-bin\native_client\libstt.so.if.lib
+LINK_STT      := $(shell cygpath "$(TFDIR)/bazel-bin/native_client/libstt.so.if.lib") $(shell cygpath "$(TFDIR)/bazel-bin/native_client/libkenlm.so.if.lib")
 LINK_PATH_STT :=
 CFLAGS_STT    := -nologo -Fe$(STT_BIN)
 SOX_CFLAGS      :=
@@ -70,43 +63,57 @@ PYTHON_PACKAGES := numpy${NUMPY_BUILD_VERSION}
 endif
 
 ifeq ($(TARGET),rpi3)
-TOOLCHAIN_DIR ?= ${TFDIR}/bazel-$(shell basename "${TFDIR}")/external/LinaroArmGcc72/bin
-TOOLCHAIN   ?= $(TOOLCHAIN_DIR)/arm-linux-gnueabihf-
+PYVER := $(shell python -c "import platform; maj, min, _ = platform.python_version_tuple(); print(maj+'.'+min);")
+ifeq ($(PYVER), 3.7)
 RASPBIAN    ?= $(abspath $(NC_DIR)/../multistrap-raspbian-buster)
+NUMPY_INCLUDE        := NUMPY_INCLUDE=$(RASPBIAN)/usr/include/python$(PYVER)m/
+PYTHON_SYSCONFIGDATA := _PYTHON_SYSCONFIGDATA_NAME=_sysconfigdata_m_linux_arm-linux-gnueabihf
+else
+RASPBIAN    ?= $(abspath $(NC_DIR)/../multistrap-raspbian-bullseye)
+NUMPY_INCLUDE        := NUMPY_INCLUDE=$(RASPBIAN)/usr/include/python$(PYVER)/
+PYTHON_SYSCONFIGDATA := _PYTHON_SYSCONFIGDATA_NAME=_sysconfigdata__linux_arm-linux-gnueabihf
+endif
+
+TOOLCHAIN_DIR ?= ${TFDIR}/bazel-$(shell basename "${TFDIR}")/external/armhf_linux_toolchain
+TOOLCHAIN   ?= $(TOOLCHAIN_DIR)/bin/arm-linux-gnueabihf-
 # -D_XOPEN_SOURCE -D_FILE_OFFSET_BITS=64 => to avoid EOVERFLOW on readdir() with 64-bits inode
-CFLAGS      := -march=armv7-a -mtune=cortex-a53 -mfpu=neon-fp-armv8 -mfloat-abi=hard -D_GLIBCXX_USE_CXX11_ABI=0 -D_XOPEN_SOURCE -D_FILE_OFFSET_BITS=64 --sysroot $(RASPBIAN)
+CFLAGS      := -march=armv7-a -mtune=cortex-a53 -mfpu=neon-fp-armv8 -mfloat-abi=hard -D_GLIBCXX_USE_CXX11_ABI=0 -D_XOPEN_SOURCE -D_FILE_OFFSET_BITS=64 -isystem $(TOOLCHAIN_DIR)/lib/gcc/arm-linux-gnueabihf/8.3.0/include -isystem $(TOOLCHAIN_DIR)/lib/gcc/arm-linux-gnueabihf/8.3.0/include-fixed -isystem $(TOOLCHAIN_DIR)/arm-linux-gnueabihf/include/c++/8.3.0/ -isystem $(TOOLCHAIN_DIR)/arm-linux-gnueabihf/libc/usr/include/ -isystem $(RASPBIAN)/usr/include -isystem /usr/include -no-canonical-prefixes -fno-canonical-system-headers
 CXXFLAGS    := $(CFLAGS)
 LDFLAGS     := -Wl,-rpath-link,$(RASPBIAN)/lib/arm-linux-gnueabihf/ -Wl,-rpath-link,$(RASPBIAN)/usr/lib/arm-linux-gnueabihf/
 
-SOX_CFLAGS  := -I$(RASPBIAN)/usr/include
+SOX_CFLAGS  :=
 SOX_LDFLAGS := $(RASPBIAN)/usr/lib/arm-linux-gnueabihf/libsox.so
 
-PYVER := $(shell python -c "import platform; maj, min, _ = platform.python_version_tuple(); print(maj+'.'+min);")
 PYTHON_PACKAGES      :=
 PYTHON_PATH          := PYTHONPATH=$(RASPBIAN)/usr/lib/python$(PYVER)/:$(RASPBIAN)/usr/lib/python3/dist-packages/
-NUMPY_INCLUDE        := NUMPY_INCLUDE=$(RASPBIAN)/usr/include/python3.7m/
-PYTHON_SYSCONFIGDATA := _PYTHON_SYSCONFIGDATA_NAME=_sysconfigdata_m_linux_arm-linux-gnueabihf
 PYTHON_PLATFORM_NAME := --plat-name linux_armv7l
 NODE_PLATFORM_TARGET := --target_arch=arm --target_platform=linux
 TOOLCHAIN_LDD_OPTS   := --root $(RASPBIAN)/
 endif # ($(TARGET),rpi3)
 
 ifeq ($(TARGET),rpi3-armv8)
-TOOLCHAIN_DIR ?= ${TFDIR}/bazel-$(shell basename "${TFDIR}")/external/LinaroAarch64Gcc72/bin
-TOOLCHAIN   ?= $(TOOLCHAIN_DIR)/aarch64-linux-gnu-
+PYVER := $(shell python -c "import platform; maj, min, _ = platform.python_version_tuple(); print(maj+'.'+min);")
+ifeq ($(PYVER), 3.7)
 RASPBIAN    ?= $(abspath $(NC_DIR)/../multistrap-raspbian64-buster)
-CFLAGS      := -march=armv8-a -mtune=cortex-a53 -D_GLIBCXX_USE_CXX11_ABI=0 --sysroot $(RASPBIAN)
+NUMPY_INCLUDE        := NUMPY_INCLUDE=$(RASPBIAN)/usr/include/python$(PYVER)m/
+PYTHON_SYSCONFIGDATA := _PYTHON_SYSCONFIGDATA_NAME=_sysconfigdata_m_linux_aarch64-linux-gnu
+else
+RASPBIAN    ?= $(abspath $(NC_DIR)/../multistrap-raspbian64-bullseye)
+NUMPY_INCLUDE        := NUMPY_INCLUDE=$(RASPBIAN)/usr/include/python$(PYVER)/
+PYTHON_SYSCONFIGDATA := _PYTHON_SYSCONFIGDATA_NAME=_sysconfigdata__linux_aarch64-linux-gnu
+endif
+
+TOOLCHAIN_DIR ?= ${TFDIR}/bazel-$(shell basename "${TFDIR}")/external/aarch64_linux_toolchain
+TOOLCHAIN   ?= $(TOOLCHAIN_DIR)/bin/aarch64-linux-gnu-
+CFLAGS      := -march=armv8-a -mtune=cortex-a53 -D_GLIBCXX_USE_CXX11_ABI=0 -isystem $(TOOLCHAIN_DIR)/lib/gcc/aarch64-linux-gnu/8.3.0/include -isystem $(TOOLCHAIN_DIR)/lib/gcc/aarch64-linux-gnu/8.3.0/include-fixed -isystem $(TOOLCHAIN_DIR)/aarch64-linux-gnu/include/c++/8.3.0/ -isystem $(TOOLCHAIN_DIR)/aarch64-linux-gnu/libc/usr/include/ -isystem $(RASPBIAN)/usr/include -isystem /usr/include/ -no-canonical-prefixes -fno-canonical-system-headers
 CXXFLAGS    := $(CFLAGS)
 LDFLAGS     := -Wl,-rpath-link,$(RASPBIAN)/lib/aarch64-linux-gnu/ -Wl,-rpath-link,$(RASPBIAN)/usr/lib/aarch64-linux-gnu/
 
-SOX_CFLAGS  := -I$(RASPBIAN)/usr/include
+SOX_CFLAGS  :=
 SOX_LDFLAGS := $(RASPBIAN)/usr/lib/aarch64-linux-gnu/libsox.so
 
-PYVER := $(shell python -c "import platform; maj, min, _ = platform.python_version_tuple(); print(maj+'.'+min);")
 PYTHON_PACKAGES      :=
 PYTHON_PATH          := PYTHONPATH=$(RASPBIAN)/usr/lib/python$(PYVER)/:$(RASPBIAN)/usr/lib/python3/dist-packages/
-PYTHON_SYSCONFIGDATA := _PYTHON_SYSCONFIGDATA_NAME=_sysconfigdata_m_linux_aarch64-linux-gnu
-NUMPY_INCLUDE        := NUMPY_INCLUDE=$(RASPBIAN)/usr/include/python3.7/
 PYTHON_PLATFORM_NAME := --plat-name linux_aarch64
 NODE_PLATFORM_TARGET := --target_arch=arm64 --target_platform=linux
 TOOLCHAIN_LDD_OPTS   := --root $(RASPBIAN)/
@@ -126,6 +133,14 @@ SOX_LDFLAGS     :=
 LDFLAGS         :=
 endif
 
+ifeq ($(TARGET),darwin-arm64)
+CFLAGS                  := -mmacosx-version-min=11.0 -target arm64-apple-macos11
+LDFLAGS                 := -mmacosx-version-min=11.0 -target arm64-apple-macos11
+
+SOX_CFLAGS              := $(shell arm-pkg-config --cflags sox)
+SOX_LDFLAGS             := $(shell arm-pkg-config --libs sox) -framework CoreAudio -lz
+endif
+
 # -Wl,--no-as-needed is required to force linker not to evict libs it thinks we
 # dont need ; will fail the build on OSX because that option does not exists
 ifeq ($(OS),Linux)
@@ -136,10 +151,6 @@ ifeq ($(OS),Darwin)
 CXXFLAGS       += -stdlib=libc++
 LDFLAGS_NEEDED := -stdlib=libc++
 LDFLAGS_RPATH  := -Wl,-rpath,@executable_path
-ifeq ($(TARGET),host)
-CXXFLAGS       += -mmacosx-version-min=10.10
-LDFLAGS_NEEDED += -mmacosx-version-min=10.10
-endif
 endif
 
 CFLAGS   += $(EXTRA_CFLAGS)
@@ -175,7 +186,7 @@ define copy_missing_libs
     SRC_FILE=$(1); \
     TARGET_LIB_DIR=$(2); \
     MANIFEST_IN=$(3); \
-    echo "Analyzing $$SRC_FILE copying missing libs to $$SRC_FILE"; \
+    echo "Analyzing $$SRC_FILE copying missing libs to $$TARGET_LIB_DIR"; \
     echo "Maybe outputting to $$MANIFEST_IN"; \
     \
     (mkdir $$TARGET_LIB_DIR || true); \
@@ -184,13 +195,14 @@ define copy_missing_libs
         if [ "$(OS)" = "Darwin" ]; then \
             new_missing="$$( (for f in $$(otool -L $$lib 2>/dev/null | tail -n +2 | awk '{ print $$1 }' | grep -v '$$lib'); do ls -hal $$f; done;) 2>&1 | grep 'No such' | cut -d':' -f2 | xargs basename -a)"; \
             missing_libs="$$missing_libs $$new_missing"; \
-    elif [ "$(OS)" = "${CI_MSYS_VERSION}" ]; then \
-            missing_libs="libstt.so"; \
+        elif [ "$(OS)" = "${CI_MSYS_VERSION}" ]; then \
+            missing_libs="libstt.so libkenlm.so"; \
         else \
             missing_libs="$$missing_libs $$($(LDD) $$lib | grep 'not found' | awk '{ print $$1 }')"; \
         fi; \
     done; \
     \
+    echo "Missing libs = $$missing_libs"; \
     for missing in $$missing_libs; do \
         find $(SO_SEARCH) -type f -name "$$missing" -exec cp {} $$TARGET_LIB_DIR \; ; \
         chmod +w $$TARGET_LIB_DIR/*.so ; \
@@ -212,11 +224,11 @@ endef
 SWIG_DIST_URL ?=
 ifeq ($(SWIG_DIST_URL),)
 ifeq ($(findstring Linux,$(OS)),Linux)
-SWIG_DIST_URL := "https://github.com/mozilla/DeepSpeech/releases/download/v0.9.3/ds-swig.linux.amd64.tar.gz"
+SWIG_DIST_URL := "https://github.com/coqui-ai/STT/releases/download/v1.3.0/ds-swig.linux.amd64.tar.gz"
 else ifeq ($(findstring Darwin,$(OS)),Darwin)
-SWIG_DIST_URL := "https://github.com/mozilla/DeepSpeech/releases/download/v0.9.3/ds-swig.darwin.amd64.tar.gz"
+SWIG_DIST_URL := "https://github.com/coqui-ai/STT/releases/download/v1.3.0/ds-swig.darwin.amd64.tar.gz"
 else ifeq ($(findstring _NT,$(OS)),_NT)
-SWIG_DIST_URL := "https://github.com/mozilla/DeepSpeech/releases/download/v0.9.3/ds-swig.win.amd64.tar.gz"
+SWIG_DIST_URL := "https://github.com/coqui-ai/STT/releases/download/v1.3.0/ds-swig.win.amd64.tar.gz"
 else
 $(error There is no prebuilt SWIG available for your platform. Please produce one and set SWIG_DIST_URL.)
 endif # findstring()
@@ -237,7 +249,7 @@ DS_SWIG_ENV := SWIG_LIB="$(SWIG_LIB)" PATH="$(DS_SWIG_BIN_PATH):${PATH}"
 
 $(DS_SWIG_BIN_PATH)/swig:
 	mkdir -p $(SWIG_ROOT)
-	wget -O - "$(SWIG_DIST_URL)" | tar -C $(SWIG_ROOT) -zxf -
+	curl -sSL "$(SWIG_DIST_URL)" | tar -C $(SWIG_ROOT) -zxf -
 	ln -s $(DS_SWIG_BIN) $(DS_SWIG_BIN_PATH)/$(SWIG_BIN)
 
 ds-swig: $(DS_SWIG_BIN_PATH)/swig

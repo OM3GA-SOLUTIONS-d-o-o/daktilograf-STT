@@ -14,7 +14,7 @@ import numpy as np
 from stt import Model, version
 
 try:
-    from shhlex import quote
+    from shlex import quote
 except ImportError:
     from pipes import quote
 
@@ -92,12 +92,12 @@ class VersionAction(argparse.Action):
         super(VersionAction, self).__init__(nargs=0, *args, **kwargs)
 
     def __call__(self, *args, **kwargs):
-        print("Daktilograf STT ", version())
+        print("Coqui STT ", version())
         exit(0)
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Running Daktilograf STT inference.")
+    parser = argparse.ArgumentParser(description="Running Coqui STT inference.")
     parser.add_argument(
         "--model", required=True, help="Path to the model (protocol buffer binary file)"
     )

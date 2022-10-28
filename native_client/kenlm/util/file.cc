@@ -1,9 +1,9 @@
 #define _LARGEFILE64_SOURCE
 #define _FILE_OFFSET_BITS 64
 
-#include "util/file.hh"
+#include "file.hh"
 
-#include "util/exception.hh"
+#include "exception.hh"
 
 #include <algorithm>
 #include <cstdlib>
@@ -265,6 +265,26 @@ void ErsatzPRead(int fd, void *to_void, std::size_t size, uint64_t off) {
       UTIL_THROW_ARG(FDException, (fd), "while reading " << size << " bytes at offset " << off);
     }
 #endif
+    size -= ret;
+    off += ret;
+    to += ret;
+  }
+}
+
+void ErsatzPRead(const char *file_data, void *to_void, std::size_t size, uint64_t off) {
+  uint8_t *to = static_cast<uint8_t*>(to_void);
+  while (size) {
+    errno = 0;
+    size_t ret = GuardLarge(size);
+
+    file_data += off;
+    std::memcpy(to, file_data, GuardLarge(size));
+
+    if (ret <= 0) {
+      if (ret == -1 && errno == EINTR) continue;
+      UTIL_THROW_IF(ret == 0, EndOfFileException, " for reading " << size << " bytes at " << off << " from buffer");
+    }
+
     size -= ret;
     off += ret;
     to += ret;
