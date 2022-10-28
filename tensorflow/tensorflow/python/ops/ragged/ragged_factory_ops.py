@@ -14,10 +14,6 @@
 # ==============================================================================
 """Operations for constructing RaggedTensors."""
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import numpy as np
 
 from tensorflow.python.framework import constant_op
@@ -192,6 +188,9 @@ def _constant_value(ragged_factory, inner_factory, pylist, dtype, ragged_rank,
     if max_depth > scalar_depth:
       raise ValueError("Invalid pylist=%r: empty list nesting is greater "
                        "than scalar value nesting" % pylist)
+    if ragged_rank is not None and max_depth < ragged_rank:
+      raise ValueError(f"Invalid pylist={pylist}, max depth smaller than "
+                       f"ragged_rank={ragged_rank}")
 
   # If both inner_shape and ragged_rank were specified, then check that
   # they are compatible with pylist.
@@ -281,7 +280,10 @@ def _default_inner_shape_for_pylist(pylist, ragged_rank):
     """Returns the inner shape for a python list `item`."""
     if not isinstance(item, (list, tuple)) and np.ndim(item) == 0:
       return ()
-    elif item:
+    # Note that we need this check here in case `item` is not a Python list but
+    # fakes as being one (pylist). For a scenario of this, see test added in
+    # https://github.com/tensorflow/tensorflow/pull/48945
+    elif len(item) > 0:  # pylint: disable=g-explicit-length-test
       return (len(item),) + get_inner_shape(item[0])
     return (0,)
 

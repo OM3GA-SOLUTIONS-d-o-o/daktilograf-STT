@@ -3,18 +3,18 @@
 // -----
 // Basic test.
 // CHECK-LABEL: func @f
-func @f() {
+func.func @f() {
   // CHECK: call @g() : () -> ()
   // CHECK: call @[[NEWG:.+]]() : () -> ()
-  call @g() : () -> ()
-  call @g() : () -> ()
-  return
+  func.call @g() : () -> ()
+  func.call @g() : () -> ()
+  func.return
 }
 
 // CHECK: func @g()
-// CHECK: func @[[NEWG]]() attributes {sym_visibility = "private"}
-func @g() {
-  return
+// CHECK: func private @[[NEWG]]()
+func.func @g() {
+  func.return
 }
 
 // -----
@@ -22,33 +22,33 @@ func @g() {
 // CHECK-LABEL: func @f
 // 2 copies of @g
 // CHECK-DAG: func @g{{.*}}
-// CHECK-DAG: func @g{{.*}}
+// CHECK-DAG: func private @g{{.*}}
 // 4 copies of @h
 // CHECK-DAG: func @h{{.*}}
-// CHECK-DAG: func @h{{.*}}
-// CHECK-DAG: func @h{{.*}}
-// CHECK-DAG: func @h{{.*}}
-func @f() {
-  call @g() : () -> ()
-  call @g() : () -> ()
-  return
+// CHECK-DAG: func private @h{{.*}}
+// CHECK-DAG: func private @h{{.*}}
+// CHECK-DAG: func private @h{{.*}}
+func.func @f() {
+  func.call @g() : () -> ()
+  func.call @g() : () -> ()
+  func.return
 }
 
-func @g() {
-  call @h() : () -> ()
-  call @h() : () -> ()
-  return
+func.func @g() {
+  func.call @h() : () -> ()
+  func.call @h() : () -> ()
+  func.return
 }
 
-func @h() {
-  return
+func.func @h() {
+  func.return
 }
 
 // -----
 // Handle error case of infinite recursion.
 // expected-error @+1 {{reached cloning limit}}
-func @f() attributes {sym_visibility = "private"} {
-  call @f() : () -> ()
-  call @f() : () -> ()
-  return
+func.func private @f() {
+  func.call @f() : () -> ()
+  func.call @f() : () -> ()
+  func.return
 }

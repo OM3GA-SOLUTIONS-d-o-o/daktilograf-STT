@@ -25,10 +25,11 @@ limitations under the License.
 namespace tensorflow {
 namespace profiler {
 
-TF_CONST_INIT extern const int64 kSlowCallThresholdPs;
+TF_CONST_INIT extern const int64_t kSlowCallThresholdPs;
 
 enum class BottleneckType {
   kSlowSource,
+  kSlowDataService,
   kSlowRemoteSource,
   kSlowTransformationWithParallelVersion,
   kSlowTransformationWithoutParallelVersion,

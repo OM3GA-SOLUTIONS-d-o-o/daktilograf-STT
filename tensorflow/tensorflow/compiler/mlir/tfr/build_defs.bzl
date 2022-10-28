@@ -25,7 +25,7 @@ def gen_op_libraries(
     py_binary(
         name = gen_op_lib_exec,
         srcs = [src],
-        srcs_version = "PY2AND3",
+        srcs_version = "PY3",
         python_version = "PY3",
         deps = [
             "//tensorflow/compiler/mlir/tfr:op_reg_gen",
@@ -34,9 +34,9 @@ def gen_op_libraries(
         ] + deps,
     )
 
-    registed_op = "registed_" + name
+    registered_op = "registered_" + name
     native.genrule(
-        name = registed_op,
+        name = registered_op,
         srcs = [],
         outs = [name + ".inc.cc"],
         cmd = "$(location %s) --output=$@ --gen_register_op=true" % gen_op_lib_exec,
@@ -47,7 +47,7 @@ def gen_op_libraries(
     native.cc_library(
         name = name + "_cc",
         testonly = test,
-        srcs = [":" + registed_op],
+        srcs = [":" + registered_op],
         deps = [
             "//tensorflow/core:framework",
             "//tensorflow/core:lib",
@@ -58,7 +58,7 @@ def gen_op_libraries(
 
     tf_custom_op_library(
         name = name + ".so",
-        srcs = [":" + registed_op],
+        srcs = [":" + registered_op],
     )
 
     tf_gen_op_wrapper_py(
@@ -73,7 +73,7 @@ def gen_op_libraries(
         name = name,
         dso = [":%s.so" % name],
         kernels = [":%s_cc" % name],
-        srcs_version = "PY2AND3",
+        srcs_version = "PY3",
         deps = [
             ":gen_%s" % name,
         ],
@@ -85,8 +85,8 @@ def gen_op_libraries(
         name = gen_tfr_lib_exec,
         main = src,
         srcs = [src],
-        srcs_version = "PY2AND3",
         python_version = "PY3",
+        srcs_version = "PY3",
         deps = [
             "//tensorflow/compiler/mlir/tfr:op_reg_gen",
             "//tensorflow/compiler/mlir/tfr:tfr_gen",
@@ -107,10 +107,45 @@ def gen_op_libraries(
     native.py_library(
         name = name + "_py",
         srcs = [src],
-        srcs_version = "PY2AND3",
+        srcs_version = "PY3",
         deps = [
             "//tensorflow/compiler/mlir/tfr:op_reg_gen",
             "//tensorflow/compiler/mlir/tfr:tfr_gen",
             "//tensorflow/compiler/mlir/tfr:composite",
         ] + deps,
+    )
+
+def gen_op_bindings(name):
+    native.cc_library(
+        name = name + "_ops_cc",
+        srcs = [name + "_ops.cc"],
+        deps = [
+            "//tensorflow/core:framework",
+            "//tensorflow/core:lib",
+            "//tensorflow/core:protos_all_cc",
+        ],
+        alwayslink = 1,
+    )
+
+    tf_custom_op_library(
+        name = name + "_ops.so",
+        srcs = [name + "_ops.cc"],
+    )
+
+    tf_gen_op_wrapper_py(
+        name = "gen_" + name + "_ops",
+        out = "gen_" + name + "_ops.py",
+        deps = [
+            ":" + name + "_ops_cc",
+        ],
+    )
+
+    tf_custom_op_py_library(
+        name = name + "_ops",
+        dso = [":" + name + "_ops.so"],
+        kernels = [":" + name + "_ops_cc"],
+        visibility = ["//visibility:public"],
+        deps = [
+            ":gen_" + name + "_ops",
+        ],
     )

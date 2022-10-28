@@ -14,11 +14,9 @@
 # ==============================================================================
 """Adam optimizer implementation."""
 # pylint: disable=g-classes-have-attributes
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 
 from tensorflow.python.eager import def_function
+from tensorflow.python.framework import indexed_slices
 from tensorflow.python.framework import ops
 from tensorflow.python.keras import backend_config
 from tensorflow.python.keras.optimizer_v2 import optimizer_v2
@@ -244,7 +242,7 @@ class Adam(optimizer_v2.OptimizerV2):
     config = super(Adam, self).get_config()
     config.update({
         'learning_rate': self._serialize_hyperparameter('learning_rate'),
-        'decay': self._serialize_hyperparameter('decay'),
+        'decay': self._initial_decay,
         'beta_1': self._serialize_hyperparameter('beta_1'),
         'beta_2': self._serialize_hyperparameter('beta_2'),
         'epsilon': self.epsilon,
@@ -416,7 +414,7 @@ class NonFusedAdam(optimizer_v2.OptimizerV2):
       weights = weights[:len(params)]
     super(NonFusedAdam, self).set_weights(weights)
 
-  @def_function.function(experimental_compile=True)
+  @def_function.function(jit_compile=True)
   def _resource_apply_dense(self, grad, var, apply_state=None):
     var_device, var_dtype = var.device, var.dtype.base_dtype
     coefficients = ((apply_state or {}).get((var_device, var_dtype)) or
@@ -437,7 +435,7 @@ class NonFusedAdam(optimizer_v2.OptimizerV2):
     var.assign_sub(
         (m * alpha) / (math_ops.sqrt(v) - coefficients['epsilon']))
 
-  @def_function.function(experimental_compile=True)
+  @def_function.function(jit_compile=True)
   def _resource_apply_sparse(self, grad, var, indices, apply_state=None):
     var_device, var_dtype = var.device, var.dtype.base_dtype
     coefficients = ((apply_state or {}).get((var_device, var_dtype)) or
@@ -447,13 +445,13 @@ class NonFusedAdam(optimizer_v2.OptimizerV2):
     m = self.get_slot(var, 'm')
     m_scaled_g_values = grad * coefficients['one_minus_beta_1_t']
     m.assign(m * coefficients['beta_1_t'])
-    m.scatter_add(ops.IndexedSlices(m_scaled_g_values, indices))
+    m.scatter_add(indexed_slices.IndexedSlices(m_scaled_g_values, indices))
 
     # v_t = beta2 * v + (1 - beta2) * (g_t * g_t)
     v = self.get_slot(var, 'v')
     v_scaled_g_values = (grad * grad) * coefficients['one_minus_beta_2_t']
     v.assign(v * coefficients['beta_2_t'])
-    v.scatter_add(ops.IndexedSlices(v_scaled_g_values, indices))
+    v.scatter_add(indexed_slices.IndexedSlices(v_scaled_g_values, indices))
 
     if not self.amsgrad:
       var.assign_sub(coefficients['lr'] * m /
@@ -468,7 +466,7 @@ class NonFusedAdam(optimizer_v2.OptimizerV2):
     config = super(NonFusedAdam, self).get_config()
     config.update({
         'learning_rate': self._serialize_hyperparameter('learning_rate'),
-        'decay': self._serialize_hyperparameter('decay'),
+        'decay': self._initial_decay,
         'beta_1': self._serialize_hyperparameter('beta_1'),
         'beta_2': self._serialize_hyperparameter('beta_2'),
         'epsilon': self.epsilon,

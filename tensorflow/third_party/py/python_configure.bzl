@@ -124,8 +124,8 @@ def _get_python_lib(repository_ctx, python_bin):
     for line in print_lib:
         cmd += "f.write(\"%s\" + linesep);" % line
     cmd += "f.close();"
-    cmd += "from os import system;"
-    cmd += "system(\"%s script.py\");" % python_bin
+    cmd += "from subprocess import call;"
+    cmd += "call([\"%s\", \"script.py\"]);" % python_bin
 
     result = execute(repository_ctx, [python_bin, "-c", cmd])
     return result.stdout.strip()
@@ -153,10 +153,13 @@ def _get_python_include(repository_ctx, python_bin):
         repository_ctx,
         [
             python_bin,
+            "-Wignore",
             "-c",
-            "from __future__ import print_function;" +
-            "from distutils import sysconfig;" +
-            "print(sysconfig.get_python_inc())",
+            "import importlib; " +
+            "import importlib.util; " +
+            "print(importlib.import_module('distutils.sysconfig').get_python_inc() " +
+            "if importlib.util.find_spec('distutils.sysconfig') " +
+            "else importlib.import_module('sysconfig').get_path('include'))",
         ],
         error_msg = "Problem getting python include path.",
         error_details = ("Is the Python binary path set up right? " +
@@ -210,7 +213,7 @@ def _create_local_python_repository(repository_ctx):
     python_lib = _get_python_lib(repository_ctx, python_bin)
     _check_python_lib(repository_ctx, python_lib)
     python_include = _get_python_include(repository_ctx, python_bin)
-#    numpy_include = _get_numpy_include(repository_ctx, python_bin) + "/numpy"
+    numpy_include = _get_numpy_include(repository_ctx, python_bin) + "/numpy"
     python_include_rule = _symlink_genrule_for_dir(
         repository_ctx,
         python_include,
@@ -222,6 +225,7 @@ def _create_local_python_repository(repository_ctx):
     # To build Python C/C++ extension on Windows, we need to link to python import library pythonXY.lib
     # See https://docs.python.org/3/extending/windows.html
     if is_windows(repository_ctx):
+        python_bin = python_bin.replace("\\", "/")
         python_include = _norm_path(python_include)
         python_import_lib_name = _get_python_import_lib_name(repository_ctx, python_bin)
         python_import_lib_src = python_include.rsplit("/", 1)[0] + "/libs/" + python_import_lib_name
@@ -233,12 +237,12 @@ def _create_local_python_repository(repository_ctx):
             [python_import_lib_src],
             [python_import_lib_name],
         )
-    #numpy_include_rule = _symlink_genrule_for_dir(
-    #    repository_ctx,
-    #    numpy_include,
-    #    "numpy_include/numpy",
-    #    "numpy_include",
-    #)
+    numpy_include_rule = _symlink_genrule_for_dir(
+        repository_ctx,
+        numpy_include,
+        "numpy_include/numpy",
+        "numpy_include",
+    )
 
     platform_constraint = ""
     if repository_ctx.attr.platform_constraint:
@@ -247,7 +251,7 @@ def _create_local_python_repository(repository_ctx):
         "%{PYTHON_BIN_PATH}": python_bin,
         "%{PYTHON_INCLUDE_GENRULE}": python_include_rule,
         "%{PYTHON_IMPORT_LIB_GENRULE}": python_import_lib_genrule,
-        #"%{NUMPY_INCLUDE_GENRULE}": numpy_include_rule,
+        "%{NUMPY_INCLUDE_GENRULE}": numpy_include_rule,
         "%{PLATFORM_CONSTRAINT}": platform_constraint,
     })
 

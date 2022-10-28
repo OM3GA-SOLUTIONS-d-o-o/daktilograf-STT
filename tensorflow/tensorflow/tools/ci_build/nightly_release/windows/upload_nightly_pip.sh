@@ -18,14 +18,45 @@ set -x
 
 source tensorflow/tools/ci_build/release/common.sh
 
-sudo pip install --upgrade twine
+# Use a virtual environment to get access to the latest pips
+python3.9 -m venv venv && source venv/bin/activate
+
+# Install a more recent version of pip and setuptools as the VM's image is too old
+python -m pip install --upgrade pip setuptools
+
+# Install a more recent version of twine
+python -m pip install --upgrade twine
+
+# Install a more recent version of wheel (needed for renaming)
+python -m pip install --upgrade wheel
 
 # Copy and rename to tf_nightly
 for f in $(ls "${KOKORO_GFILE_DIR}"/tf_nightly_gpu*dev*cp3*-cp3*-win_amd64.whl); do
-  copy_to_new_project_name "${f}" tf_nightly
+  copy_to_new_project_name "${f}" tf_nightly python
 done
 
+OVERALL_RETVAL=0
 # Upload the built packages to pypi.
-for f in $(ls "${KOKORO_GFILE_DIR}"/tf_nightly*dev*cp3*-cp3*-win_amd64.whl); do
-  twine upload -r pypi-warehouse "$f" || echo
+# Note: The windows wheels are built by separate jobs, this one just uploads
+# them. This is to only have one single upload job, instead of several like we
+# do for Ubuntu and MacOS. The benefit is that we only build the Windows wheels
+# only once, so we don't wait 6-7 hours again for the process to end. However,
+# if the building job fails, this one will attempt to upload the wheels for the
+# previous day. Hence, we are checking here that only the proper wheels get
+# updated.
+TODAY=`date +%Y%m%d`
+WHEEL_PATTERN=tf_nightly*dev"${TODAY}"*cp3*-cp3*-win_amd64.whl
+for f in $(find "${KOKORO_GFILE_DIR}" -name "${WHEEL_PATTERN}"); do
+  test_tf_whl_size $f
+  RETVAL=$?
+
+  # Upload the PIP package if whl test passes.
+  if [ ${RETVAL} -eq 0 ]; then
+    python -m twine upload -r pypi-warehouse "$f"
+  else
+    echo "Unable to upload package $f. Size check failed."
+    OVERALL_RETVAL=1
+  fi
 done
+
+exit $OVERALL_RETVAL

@@ -17,9 +17,9 @@ limitations under the License.
 #include "tensorflow/compiler/xla/status.h"
 #include "tensorflow/core/tpu/kernels/tpu_compile.pb.h"
 #include "tensorflow/core/tpu/kernels/tpu_compile_op_support.h"
-#include "tensorflow/core/tpu/kernels/tpu_mesh_state_c_api.h"
 #include "tensorflow/core/tpu/kernels/tpu_program_group.h"
 #include "tensorflow/core/tpu/kernels/tpu_program_group_interface.h"
+#include "tensorflow/core/tpu/tpu_ops_c_api.h"
 
 namespace tensorflow {
 namespace tpu {
@@ -29,13 +29,20 @@ Status TpuCompileOpKernelImpl::Compile(
     const absl::variant<MlirToHloArgs, FunctionToHloArgs>& computation,
     const XLA_TpuMeshState* mesh_state,
     const std::vector<TensorShape>& arg_shapes,
+    const TpuCompilationCacheKey* key,
     TpuProgramGroupInterface* tpu_program_group) {
   TF_ASSIGN_OR_RETURN(
       TpuCompilationRequestProto compilation_request,
       CreateTpuCompilationRequest(computation, metadata_, arg_shapes));
 
-  return TpuProgramGroup::CompileAndBuild(compilation_request, mesh_state,
-                                          tpu_program_group);
+  Status s = TpuProgramGroup::CompileAndBuild(compilation_request, mesh_state,
+                                              tpu_program_group);
+  TF_RETURN_IF_ERROR(RegisterXLAFingerprints(
+      arg_shapes, tpu_program_group,
+      computation.index() == 0
+          ? mlir_module_fingerprint_
+          : compilation_request.metadata().function_library_fingerprint()));
+  return s;
 }
 
 class TpuCompileOpImplFactory : public CompileOpImplFactory {

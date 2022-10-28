@@ -18,13 +18,15 @@ limitations under the License.
 
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/SmallVector.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"  // from @llvm-project
 #include "mlir/IR/Builders.h"  // from @llvm-project
-#include "mlir/IR/Module.h"  // from @llvm-project
+#include "mlir/IR/BuiltinOps.h"  // from @llvm-project
 #include "mlir/IR/UseDefLists.h"  // from @llvm-project
 #include "mlir/Pass/Pass.h"  // from @llvm-project
 #include "mlir/Support/LLVM.h"  // from @llvm-project
 #include "tensorflow/compiler/mlir/tensorflow/ir/tf_ops.h"
 #include "tensorflow/compiler/mlir/tensorflow/ir/tf_saved_model.h"
+#include "tensorflow/compiler/mlir/tensorflow/transforms/savedmodel_passes_detail.h"
 
 namespace mlir {
 namespace tf_saved_model {
@@ -33,8 +35,8 @@ using mlir::Operation;
 using mlir::TF::VarHandleOp;
 
 class RemoveVariablesInSessionInitializerPass
-    : public PassWrapper<RemoveVariablesInSessionInitializerPass,
-                         OperationPass<ModuleOp>> {
+    : public RemoveVariablesInSessionInitializerPassBase<
+          RemoveVariablesInSessionInitializerPass> {
  public:
   void runOnOperation() override;
 };
@@ -82,30 +84,30 @@ void RemoveVariablesInSessionInitializerPass::runOnOperation() {
   if (!session_init_op) return;
 
   SymbolTable symbol_table(module);
-  FuncOp init_func_op =
-      symbol_table.lookup<mlir::FuncOp>(session_init_op.initializer());
 
-  if (!init_func_op) {
-    module.emitError("no session initializer function found");
-    return signalPassFailure();
+  for (auto sym_ref : session_init_op.initializers()) {
+    FuncOp init_func_op = symbol_table.lookup<mlir::func::FuncOp>(
+        sym_ref.cast<FlatSymbolRefAttr>().getValue());
+
+    if (!init_func_op) {
+      module.emitError("no session initializer function found");
+      return signalPassFailure();
+    }
+
+    if (init_func_op.getBlocks().size() != 1) {
+      init_func_op.emitError("expects exactly one block in the MLIR function");
+      return signalPassFailure();
+    }
+
+    auto var_handle_ops =
+        init_func_op.getBlocks().front().getOps<VarHandleOp>();
+    llvm::SmallVector<VarHandleOp, 4> init_vars(var_handle_ops.begin(),
+                                                var_handle_ops.end());
+    RemoveVariables(init_vars);
   }
-
-  if (init_func_op.getBlocks().size() != 1) {
-    init_func_op.emitError("expects exactly one block in the MLIR function");
-    return signalPassFailure();
-  }
-
-  auto var_handle_ops = init_func_op.getBlocks().front().getOps<VarHandleOp>();
-  llvm::SmallVector<VarHandleOp, 4> init_vars(var_handle_ops.begin(),
-                                              var_handle_ops.end());
-  RemoveVariables(init_vars);
 }
 
 }  // namespace
-
-static PassRegistration<RemoveVariablesInSessionInitializerPass> pass(
-    "tf-saved-model-remove-vars-in-session-initializer",
-    "Remove variables in tf saved model's session initializer.");
 
 std::unique_ptr<OperationPass<ModuleOp>>
 CreateRemoveVariablesInSessionInitializerPass() {

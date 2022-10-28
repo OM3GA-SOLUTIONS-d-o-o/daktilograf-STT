@@ -13,18 +13,18 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef TENSORFLOW_COMPILER_MLIR_HLO_INCLUDE_MLIR_HLO_UTILS_HLO_UTILS_H_
-#define TENSORFLOW_COMPILER_MLIR_HLO_INCLUDE_MLIR_HLO_UTILS_HLO_UTILS_H_
+#ifndef MLIR_HLO_UTILS_HLO_UTILS_H
+#define MLIR_HLO_UTILS_HLO_UTILS_H
 
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/PatternMatch.h"
-#include "mlir/IR/StandardTypes.h"
 #include "mlir/IR/TypeUtilities.h"
 
 namespace mlir {
 namespace hlo {
-
 // Computes the broadcast dimensions attr for an elementwise binary operator
 // between two ranked tensors.
 // If `allow_empty` is true, then null can be returned to mean that the
@@ -68,10 +68,15 @@ static ElementsAttr getSplat(Builder* b, Value val, T constant) {
 // Requires `ty` to be either FloatType, IntegerType, or ComplexType.
 DenseElementsAttr GetScalarOfType(Type ty, int64_t raw_value);
 
+// Returns DenseElementsAttr of rank zero with the given element type and the
+// value which is the neutral element for additions.
+// Requires `ty` to be either FloatType, IntegerType, or ComplexType.
+DenseElementsAttr GetScalarNegZeroOfType(Type ty);
+
 // Enum type used to specify scalar argument to GetScalarLimitOfType.
 enum ScalarLimit {
   kLowest,          // The scalar corresponding to numeric_limits<T>::lowest.
-  kInfinityLowest,  // Like kMax, but returns -infinity where available.
+  kInfinityLowest,  // Like kLowest, but returns -infinity where available.
   kMax,             // The scalar corresponding to numeric_limits<T>::max.
   kInfinityMax,     // Like kMax, but returns infinity where available.
 };
@@ -83,7 +88,21 @@ enum ScalarLimit {
 // Requires `ty` to be either FloatType or IntegerType.
 DenseElementsAttr GetScalarLimitOfType(Type ty, ScalarLimit limit);
 
+// Given `op_name` from LMHLO, returns the corresponding op name in MHLO.
+// Returns empty string if no such op exists.
+std::string LmhloToMhloOpName(llvm::StringRef op_name,
+                              mlir::MLIRContext* context);
+
+// Return true if Attr has values [0, 1, ...].
+bool IsSequenceStartingWith0(Attribute attr);
+
+// Returns the argument index for the giving FuncOp and its operand value.
+int64_t getArgumentIndex(func::FuncOp op, Value value);
+
+/// Computes the memory usage of the given allocations.
+std::pair<size_t, size_t> computeMemory(const std::vector<Value>& allocs);
+
 }  // namespace hlo
 }  // namespace mlir
 
-#endif  // TENSORFLOW_COMPILER_MLIR_HLO_INCLUDE_MLIR_HLO_UTILS_HLO_UTILS_H_
+#endif  // MLIR_HLO_UTILS_HLO_UTILS_H

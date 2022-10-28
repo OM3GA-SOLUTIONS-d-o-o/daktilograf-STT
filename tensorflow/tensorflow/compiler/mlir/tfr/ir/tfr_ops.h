@@ -16,15 +16,18 @@ limitations under the License.
 #ifndef TENSORFLOW_COMPILER_MLIR_TFR_IR_TFR_OPS_H_
 #define TENSORFLOW_COMPILER_MLIR_TFR_IR_TFR_OPS_H_
 
+#include "llvm/ADT/StringSet.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"  // from @llvm-project
+#include "mlir/IR/BuiltinOps.h"  // from @llvm-project
+#include "mlir/IR/BuiltinTypes.h"  // from @llvm-project
 #include "mlir/IR/Dialect.h"  // from @llvm-project
 #include "mlir/IR/DialectImplementation.h"  // from @llvm-project
-#include "mlir/IR/FunctionSupport.h"  // from @llvm-project
+#include "mlir/IR/FunctionInterfaces.h"  // from @llvm-project
 #include "mlir/IR/MLIRContext.h"  // from @llvm-project
-#include "mlir/IR/Module.h"  // from @llvm-project
-#include "mlir/IR/StandardTypes.h"  // from @llvm-project
 #include "mlir/IR/Types.h"  // from @llvm-project
 #include "mlir/Interfaces/CallInterfaces.h"  // from @llvm-project
 #include "mlir/Interfaces/ControlFlowInterfaces.h"  // from @llvm-project
+#include "mlir/Interfaces/InferTypeOpInterface.h"  // from @llvm-project
 #include "mlir/Interfaces/SideEffectInterfaces.h"  // from @llvm-project
 
 namespace mlir {
@@ -32,12 +35,16 @@ namespace TFR {
 
 constexpr char kAttrArgumentNameAttr[] = "tfr.name";
 constexpr char kAttrArgumentDefaultAttr[] = "tfr.default";
+constexpr char kAttrArgumentTypeAttr[] = "tfr.type";
 
 class TFRDialect : public Dialect {
  public:
   explicit TFRDialect(MLIRContext *context);
 
   static StringRef getDialectNamespace() { return "tfr"; }
+
+  Operation *materializeConstant(OpBuilder &builder, Attribute value, Type type,
+                                 Location loc) override;
 
   // Parse a type registered to this dialect.
   Type parseType(DialectAsmParser &parser) const override;

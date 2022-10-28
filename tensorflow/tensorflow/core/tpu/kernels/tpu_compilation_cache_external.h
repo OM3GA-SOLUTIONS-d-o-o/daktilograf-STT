@@ -34,18 +34,18 @@ limitations under the License.
 #include "tensorflow/core/tpu/kernels/tpu_compilation_cache_entry.h"
 #include "tensorflow/core/tpu/kernels/tpu_compilation_cache_interface.h"
 #include "tensorflow/core/tpu/kernels/tpu_compilation_cache_key.h"
-#include "tensorflow/core/tpu/kernels/tpu_compile_c_api.h"
 #include "tensorflow/core/tpu/kernels/tpu_compile_op_support.h"
 #include "tensorflow/core/tpu/kernels/tpu_mesh_state_interface.h"
 #include "tensorflow/core/tpu/kernels/tpu_op_consts.h"
 #include "tensorflow/core/tpu/kernels/tpu_program_group.h"
+#include "tensorflow/core/tpu/tpu_ops_c_api.h"
 
 namespace tensorflow {
 namespace tpu {
 
 class TpuCompilationCacheExternal : public TpuCompilationCacheInterface {
  public:
-  explicit TpuCompilationCacheExternal(int64 max_cache_size)
+  explicit TpuCompilationCacheExternal(int64_t max_cache_size)
       : TpuCompilationCacheInterface(max_cache_size) {}
 
   string DebugString() const override { return "TpuCompilationCacheExternal"; }

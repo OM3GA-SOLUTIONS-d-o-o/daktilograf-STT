@@ -29,10 +29,13 @@ namespace tensorflow {
 namespace profiler {
 
 XStatVisitor::XStatVisitor(const XPlaneVisitor* plane, const XStat* stat)
-    : stat_(stat),
-      metadata_(plane->GetStatMetadata(stat->metadata_id())),
-      plane_(plane),
-      type_(plane->GetStatType(stat->metadata_id())) {}
+    : XStatVisitor(plane, stat, plane->GetStatMetadata(stat->metadata_id()),
+                   plane->GetStatType(stat->metadata_id())) {}
+
+XStatVisitor::XStatVisitor(const XPlaneVisitor* plane, const XStat* stat,
+                           const XStatMetadata* metadata,
+                           absl::optional<int64_t> type)
+    : stat_(stat), metadata_(metadata), plane_(plane), type_(type) {}
 
 std::string XStatVisitor::ToString() const {
   switch (stat_->value_case()) {
@@ -91,15 +94,29 @@ void XPlaneVisitor::BuildEventTypeMap(
     uint64 metadata_id = event_metadata.first;
     const auto& metadata = event_metadata.second;
     for (const auto& event_type_getter : event_type_getter_list) {
-      absl::optional<int64> event_type = event_type_getter(metadata.name());
+      absl::optional<int64_t> event_type = event_type_getter(metadata.name());
       if (event_type.has_value()) {
-        auto result = event_metadata_id_map_.emplace(metadata_id, *event_type);
+        auto result = event_type_by_id_.emplace(metadata_id, *event_type);
         DCHECK(result.second);  // inserted
-        event_type_map_.emplace(*event_type, &metadata);
         break;
       }
     }
   }
+}
+
+const XEventMetadata* XPlaneVisitor::GetEventMetadata(
+    int64_t event_metadata_id) const {
+  const auto& event_metadata_by_id = plane_->event_metadata();
+  const auto it = event_metadata_by_id.find(event_metadata_id);
+  if (it != event_metadata_by_id.end()) return &it->second;
+  return &XEventMetadata::default_instance();
+}
+
+absl::optional<int64_t> XPlaneVisitor::GetEventType(
+    int64_t event_metadata_id) const {
+  const auto it = event_type_by_id_.find(event_metadata_id);
+  if (it != event_type_by_id_.end()) return it->second;
+  return absl::nullopt;
 }
 
 void XPlaneVisitor::BuildStatTypeMap(
@@ -108,11 +125,11 @@ void XPlaneVisitor::BuildStatTypeMap(
     uint64 metadata_id = stat_metadata.first;
     const auto& metadata = stat_metadata.second;
     for (const auto& stat_type_getter : stat_type_getter_list) {
-      absl::optional<int64> stat_type = stat_type_getter(metadata.name());
+      absl::optional<int64_t> stat_type = stat_type_getter(metadata.name());
       if (stat_type.has_value()) {
-        auto result = stat_metadata_id_map_.emplace(metadata_id, *stat_type);
+        auto result = stat_type_by_id_.emplace(metadata_id, *stat_type);
         DCHECK(result.second);  // inserted
-        stat_type_map_.emplace(*stat_type, &metadata);
+        stat_metadata_by_type_.emplace(*stat_type, &metadata);
         break;
       }
     }
@@ -120,38 +137,25 @@ void XPlaneVisitor::BuildStatTypeMap(
 }
 
 const XStatMetadata* XPlaneVisitor::GetStatMetadata(
-    int64 stat_metadata_id) const {
-  const auto& stat_metadata_map = plane_->stat_metadata();
-  const auto it = stat_metadata_map.find(stat_metadata_id);
-  if (it != stat_metadata_map.end()) return &it->second;
+    int64_t stat_metadata_id) const {
+  const auto& stat_metadata_by_id = plane_->stat_metadata();
+  const auto it = stat_metadata_by_id.find(stat_metadata_id);
+  if (it != stat_metadata_by_id.end()) return &it->second;
   return &XStatMetadata::default_instance();
 }
 
-absl::optional<int64> XPlaneVisitor::GetStatType(int64 stat_metadata_id) const {
-  const auto it = stat_metadata_id_map_.find(stat_metadata_id);
-  if (it != stat_metadata_id_map_.end()) return it->second;
+absl::optional<int64_t> XPlaneVisitor::GetStatType(
+    int64_t stat_metadata_id) const {
+  const auto it = stat_type_by_id_.find(stat_metadata_id);
+  if (it != stat_type_by_id_.end()) return it->second;
   return absl::nullopt;
 }
 
-absl::optional<int64> XPlaneVisitor::GetStatMetadataId(int64 stat_type) const {
-  const auto it = stat_type_map_.find(stat_type);
-  if (it != stat_type_map_.end()) return it->second->id();
-  return absl::nullopt;
-}
-
-const XEventMetadata* XPlaneVisitor::GetEventMetadata(
-    int64 event_metadata_id) const {
-  const auto& event_metadata_map = plane_->event_metadata();
-  const auto it = event_metadata_map.find(event_metadata_id);
-  if (it != event_metadata_map.end()) return &it->second;
-  return &XEventMetadata::default_instance();
-}
-
-absl::optional<int64> XPlaneVisitor::GetEventType(
-    int64 event_metadata_id) const {
-  const auto it = event_metadata_id_map_.find(event_metadata_id);
-  if (it != event_metadata_id_map_.end()) return it->second;
-  return absl::nullopt;
+const XStatMetadata* XPlaneVisitor::GetStatMetadataByType(
+    int64_t stat_type) const {
+  const auto it = stat_metadata_by_type_.find(stat_type);
+  if (it != stat_metadata_by_type_.end()) return it->second;
+  return nullptr;
 }
 
 }  // namespace profiler

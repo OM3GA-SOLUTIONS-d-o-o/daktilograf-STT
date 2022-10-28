@@ -1,3 +1,4 @@
+load("@rules_proto//proto:defs.bzl", "proto_library")
 load(
     "@com_google_protobuf//:protobuf.bzl",
     "cc_proto_library",
@@ -15,18 +16,33 @@ filegroup(
 # Map of all well known protos.
 # name => (include path, imports)
 WELL_KNOWN_PROTO_MAP = {
-    "any" : ("google/protobuf/any.proto", []),
-    "api" : ("google/protobuf/api.proto", ["source_context", "type"]),
-    "compiler_plugin" : ("google/protobuf/compiler/plugin.proto", ["descriptor"]),
-    "descriptor" : ("google/protobuf/descriptor.proto", []),
-    "duration" : ("google/protobuf/duration.proto", []),
-    "empty" : ("google/protobuf/empty.proto", []),
-    "field_mask" : ("google/protobuf/field_mask.proto", []),
-    "source_context" : ("google/protobuf/source_context.proto", []),
-    "struct" : ("google/protobuf/struct.proto", []),
-    "timestamp" : ("google/protobuf/timestamp.proto", []),
-    "type" : ("google/protobuf/type.proto", ["any", "source_context"]),
-    "wrappers" : ("google/protobuf/wrappers.proto", []),
+    "any": ("google/protobuf/any.proto", []),
+    "api": (
+        "google/protobuf/api.proto",
+        [
+            "source_context",
+            "type",
+        ],
+    ),
+    "compiler_plugin": (
+        "google/protobuf/compiler/plugin.proto",
+        ["descriptor"],
+    ),
+    "descriptor": ("google/protobuf/descriptor.proto", []),
+    "duration": ("google/protobuf/duration.proto", []),
+    "empty": ("google/protobuf/empty.proto", []),
+    "field_mask": ("google/protobuf/field_mask.proto", []),
+    "source_context": ("google/protobuf/source_context.proto", []),
+    "struct": ("google/protobuf/struct.proto", []),
+    "timestamp": ("google/protobuf/timestamp.proto", []),
+    "type": (
+        "google/protobuf/type.proto",
+        [
+            "any",
+            "source_context",
+        ],
+    ),
+    "wrappers": ("google/protobuf/wrappers.proto", []),
 }
 
 RELATIVE_WELL_KNOWN_PROTOS = [proto[1][0] for proto in WELL_KNOWN_PROTO_MAP.items()]
@@ -85,13 +101,13 @@ proto_gen(
 
 py_library(
     name = "protobuf_python",
-    srcs_version = "PY2AND3",
+    srcs_version = "PY3",
     visibility = ["//visibility:public"],
 )
 
 [proto_library(
     name = proto[0] + "_proto",
     srcs = [proto[1][0]],
-    deps = [dep + "_proto" for dep in proto[1][1]],
     visibility = ["//visibility:public"],
-    ) for proto in WELL_KNOWN_PROTO_MAP.items()]
+    deps = [dep + "_proto" for dep in proto[1][1]],
+) for proto in WELL_KNOWN_PROTO_MAP.items()]

@@ -18,8 +18,12 @@ package(
         "//tensorflow/core/framework:__pkg__",
         # tensorflow/core/util uses array_slice, inlined_vector
         "//tensorflow/core/util:__pkg__",
+        # tensorflow/core/tfrt/utils uses array_slice, inlined_vector
+        "//tensorflow/core/tfrt/utils:__pkg__",
+        # tensorflow/examples/custom_ops_doc/simple_hash_table uses map_util
+        "//tensorflow/examples/custom_ops_doc/simple_hash_table:__pkg__",
     ],
-    licenses = ["notice"],  # Apache 2.0
+    licenses = ["notice"],
 )
 
 # Todo(bmzhao): Remaining targets to add to this BUILD file are: all tests.
@@ -194,7 +198,10 @@ filegroup(
     srcs = [
         "cleanup.h",
     ],
-    visibility = ["//tensorflow/core:__pkg__"],
+    visibility = [
+        "//tensorflow/core:__pkg__",
+        "//tensorflow/core/lib/gif:__pkg__",
+    ],
 )
 
 # Export source files needed for mobile builds, which do not use granular targets.

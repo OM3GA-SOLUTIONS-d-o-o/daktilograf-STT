@@ -1,4 +1,3 @@
-# Lint as: python2, python3
 # Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,10 +13,6 @@
 # limitations under the License.
 # ==============================================================================
 """Upgrader for Python scripts from 1.* TensorFlow to 2.0 TensorFlow."""
-
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 
 import ast
 import copy
@@ -1845,7 +1840,10 @@ def _dropout_transformer(parent, node, full_name, name, logs):
                  "automatic fix was disabled. tf.nn.dropout has changed "
                  "the semantics of the second argument."))
   else:
-    _replace_keep_prob_node(node, node.args[1])
+    rate_arg = ast.keyword(arg="rate", value=node.args[1])
+    _replace_keep_prob_node(rate_arg, rate_arg.value)
+    node.keywords.append(rate_arg)
+    del node.args[1]
     logs.append((ast_edits.INFO, node.lineno, node.col_offset,
                  "Changing keep_prob arg of tf.nn.dropout to rate, and "
                  "recomputing value.\n"))
@@ -2075,8 +2073,8 @@ def _add_summary_step_transformer(parent, node, full_name, name, logs):
     if keyword_arg.arg == "step":
       return node
   default_value = "tf.compat.v1.train.get_or_create_global_step()"
-  # Parse with pasta instead of ast to avoid emitting a spurious trailing \n.
-  ast_value = pasta.parse(default_value)
+  ast_value = ast.parse(default_value).body[0].value
+  del ast_value.lineno  # hack to prevent spurious reordering of call args
   node.keywords.append(ast.keyword(arg="step", value=ast_value))
   logs.append((
       ast_edits.WARNING, node.lineno, node.col_offset,

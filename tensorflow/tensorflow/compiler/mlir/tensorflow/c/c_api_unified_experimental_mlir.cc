@@ -20,15 +20,14 @@ limitations under the License.
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/iterator_range.h"
 #include "llvm/Support/raw_ostream.h"
-#include "mlir/Dialect/StandardOps/IR/Ops.h"  // from @llvm-project
+#include "mlir/Dialect/Func/IR/FuncOps.h"  // from @llvm-project
 #include "mlir/IR/Attributes.h"  // from @llvm-project
-#include "mlir/IR/Function.h"  // from @llvm-project
+#include "mlir/IR/BuiltinOps.h"  // from @llvm-project
+#include "mlir/IR/BuiltinTypes.h"  // from @llvm-project
 #include "mlir/IR/Location.h"  // from @llvm-project
 #include "mlir/IR/MLIRContext.h"  // from @llvm-project
-#include "mlir/IR/Module.h"  // from @llvm-project
 #include "mlir/IR/Operation.h"  // from @llvm-project
 #include "mlir/IR/OperationSupport.h"  // from @llvm-project
-#include "mlir/IR/StandardTypes.h"  // from @llvm-project
 #include "mlir/IR/TypeUtilities.h"  // from @llvm-project
 #include "mlir/Pass/PassManager.h"  // from @llvm-project
 #include "mlir/Support/LLVM.h"  // from @llvm-project
@@ -54,6 +53,7 @@ limitations under the License.
 #include "tensorflow/compiler/mlir/tensorflow/utils/dump_mlir_util.h"
 #include "tensorflow/compiler/mlir/tensorflow/utils/error_util.h"
 #include "tensorflow/core/framework/node_def_util.h"
+#include "tensorflow/core/framework/tensor_shape.h"
 #include "tensorflow/core/framework/types.pb.h"
 #include "tensorflow/core/lib/llvm_rtti/llvm_rtti.h"
 #include "tensorflow/core/platform/errors.h"
@@ -77,8 +77,10 @@ using tensorflow::tracing::TracingTensorHandle;
 namespace {
 
 void RegisterDialects(mlir::MLIRContext& ctx) {
-  mlir::RegisterAllTensorFlowDialects(ctx.getDialectRegistry());
-  ctx.getDialectRegistry().loadAll(&ctx);
+  mlir::DialectRegistry registry;
+  mlir::RegisterAllTensorFlowDialects(registry);
+  ctx.appendDialectRegistry(registry);
+  ctx.loadAllAvailableDialects();
 }
 
 Status ConvertDataTypeToTensor(tensorflow::DataType dtype, Builder builder,
@@ -100,6 +102,13 @@ class MlirTensor : public TracingTensorHandle {
       return tensorflow::DT_INVALID;
     }
     return type;
+  }
+
+  tensorflow::Status Shape(
+      tensorflow::PartialTensorShape* shape) const override {
+    // TODO(b/173074167): Implement this and enable tests in
+    // unified_api_test.cc.
+    return Unimplemented("MlirTensor::Shape is not implemented yet.");
   }
 
   Value getValue() { return value_; }
@@ -209,7 +218,7 @@ class MlirAbstractOp : public TracingOperation {
 class MlirFunction : public AbstractFunction {
  public:
   explicit MlirFunction(std::unique_ptr<MLIRContext> context,
-                        OwningModuleRef module, FuncOp func)
+                        OwningOpRef<mlir::ModuleOp> module, FuncOp func)
       : AbstractFunction(kMlir),
         context_(std::move(context)),
         module_(std::move(module)),
@@ -224,7 +233,7 @@ class MlirFunction : public AbstractFunction {
 
  private:
   std::unique_ptr<MLIRContext> context_;
-  OwningModuleRef module_;
+  OwningOpRef<mlir::ModuleOp> module_;
   FuncOp func_;
   std::unique_ptr<tensorflow::FunctionDef> fdef_;
 };
@@ -250,6 +259,7 @@ class MlirFunctionContext : public TracingContext {
     return new MlirAbstractOp(context_.get(), this);
   }
   Status AddParameter(tensorflow::DataType dtype,
+                      const tensorflow::PartialTensorShape& shape,
                       TracingTensorHandle** handle) override;
 
   Status Finalize(OutputList* outputs, AbstractFunction** f) override;
@@ -270,7 +280,7 @@ class MlirFunctionContext : public TracingContext {
   std::unique_ptr<MLIRContext> context_;
   OpBuilder builder_;
   FuncOp func_;
-  OwningModuleRef module_;
+  OwningOpRef<mlir::ModuleOp> module_;
 };
 
 Status MlirAbstractOp::Reset(const char* op, const char* device_name) {
@@ -453,7 +463,7 @@ Status MlirAbstractOp::SetAttrFloat(const char* attr_name, float value) {
   return Unimplemented("SetAttrFloat has not been implemented yet.");
 }
 Status MlirAbstractOp::SetAttrBool(const char* attr_name, bool value) {
-  attrs_[attr_name] = BoolAttr::get(value, context_);
+  attrs_[attr_name] = BoolAttr::get(context_, value);
   return Status::OK();
 }
 Status MlirAbstractOp::SetAttrShape(const char* attr_name, const int64_t* dims,
@@ -519,7 +529,7 @@ Status MlirFunction::GetFunctionDef(tensorflow::FunctionDef** f) {
   // In case of failure, the `diag_handler` converts MLIR errors emitted to
   // the MLIRContext into a tensorflow::Status.
   StatusScopedDiagnosticHandler diag_handler(func_.getContext());
-  LogicalResult result = pm.run(func_.getParentOfType<ModuleOp>());
+  LogicalResult result = pm.run(func_->getParentOfType<ModuleOp>());
   (void)result;
   TF_RETURN_IF_ERROR(diag_handler.ConsumeStatus());
 
@@ -544,14 +554,18 @@ Status MlirAbstractOp::Execute(absl::Span<AbstractTensorHandle*> retvals,
 
 Operation* MlirFunctionContext::CreateOperationFromState(
     const OperationState& state) {
-  return builder_.createOperation(state);
+  return builder_.create(state);
 }
 
-Status MlirFunctionContext::AddParameter(tensorflow::DataType dtype,
-                                         TracingTensorHandle** handle) {
+Status MlirFunctionContext::AddParameter(
+    tensorflow::DataType dtype, const tensorflow::PartialTensorShape& shape,
+    TracingTensorHandle** handle) {
+  // TODO(b/173073199): Use shape. Enable tests in unified_api_test.cc once
+  // resolved.
   Type type;
   TF_RETURN_IF_ERROR(ConvertDataTypeToTensor(dtype, builder_, &type));
-  *handle = new MlirTensor(func_.getBody().front().addArgument(type));
+  *handle =
+      new MlirTensor(func_.getBody().front().addArgument(type, func_.getLoc()));
   return Status::OK();
 }
 
@@ -635,7 +649,7 @@ Status MlirAbstractOp::AddInputList(
     types.reserve(inputs.size());
     for (AbstractTensorHandle* input : inputs)
       types.push_back(TypeAttr::get(cast<MlirTensor>(input)->getElementType()));
-    attrs_[arg_def.type_list_attr()] = ArrayAttr::get(types, GetContext());
+    attrs_[arg_def.type_list_attr()] = ArrayAttr::get(GetContext(), types);
   }
   return Status::OK();
 }
@@ -653,11 +667,11 @@ Status MlirFunctionContext::Finalize(OutputList* outputs,
           "Capturing tensors from other context is not supported.");
     ret_operands.push_back(operand->getValue());
   }
-  builder_.create<ReturnOp>(func_.getLoc(), ret_operands);
+  builder_.create<func::ReturnOp>(func_.getLoc(), ret_operands);
 
   auto arg_types = body.getArgumentTypes();
   auto result_types = body.getTerminator()->getOperandTypes();
-  func_.setType(FunctionType::get(arg_types, result_types, func_.getContext()));
+  func_.setType(FunctionType::get(func_.getContext(), arg_types, result_types));
   *f = new MlirFunction(std::move(context_), std::move(module_), func_);
   return Status::OK();
 }

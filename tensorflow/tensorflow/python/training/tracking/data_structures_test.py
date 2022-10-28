@@ -12,10 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import collections
 import copy
 import json
@@ -30,7 +26,6 @@ from tensorflow.python.eager import def_function
 from tensorflow.python.eager import test
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import tensor_shape
-from tensorflow.python.keras.saving.saved_model import json_utils
 from tensorflow.python.layers import core as non_keras_core
 from tensorflow.python.module import module
 from tensorflow.python.ops import array_ops
@@ -40,6 +35,7 @@ from tensorflow.python.training.tracking import data_structures
 from tensorflow.python.training.tracking import tracking
 from tensorflow.python.training.tracking import util
 from tensorflow.python.util import nest
+from tensorflow.python.util import serialization
 
 
 class ListTests(test.TestCase):
@@ -47,7 +43,7 @@ class ListTests(test.TestCase):
   def testJSONSerialization(self):
     obj = tracking.AutoTrackable()
     obj.l = [1]
-    json.dumps(obj.l, default=json_utils.get_json_type)
+    json.dumps(obj.l, default=serialization.get_json_type)
 
   def testNotTrackable(self):
     class NotTrackable(object):
@@ -58,7 +54,7 @@ class ListTests(test.TestCase):
 
   def testCallNotImplemented(self):
     with self.assertRaisesRegex(TypeError, "not callable"):
-      data_structures.List()(1.)
+      data_structures.List()(1.)  # pylint: disable=not-callable
 
   def testNoPop(self):
     with self.assertRaises(AttributeError):
@@ -257,7 +253,7 @@ class ListWrapperTest(test.TestCase):
 
   def testNotHashable(self):
     with self.assertRaises(TypeError):
-      hash(data_structures.ListWrapper())
+      hash(data_structures.ListWrapper())  # pylint: disable=no-value-for-parameter
 
   def testDelItem(self):
     l = data_structures.ListWrapper([1, 2, 3, [4]])
@@ -329,7 +325,7 @@ class ListWrapperTest(test.TestCase):
   def assertUnableToSave(self, l, msg):
     l._maybe_initialize_trackable()  # pylint: disable=protected-access
     with self.assertRaisesRegex(ValueError, msg):
-      return l._checkpoint_dependencies  # pylint: disable=protected-access
+      return l._trackable_children()  # pylint: disable=protected-access
 
 
 class MappingTests(test.TestCase):
@@ -337,7 +333,7 @@ class MappingTests(test.TestCase):
   def testJSONSerialization(self):
     obj = tracking.AutoTrackable()
     obj.d = {"a": 2}
-    json.dumps(obj.d, default=json_utils.get_json_type)
+    json.dumps(obj.d, default=serialization.get_json_type)
 
   def testNoOverwrite(self):
     mapping = data_structures.Mapping()
@@ -347,7 +343,7 @@ class MappingTests(test.TestCase):
       mapping["a"] = data_structures.List()
     self.assertIs(original, mapping["a"])
     with self.assertRaises(AttributeError):
-      del mapping["a"]
+      del mapping["a"]  # pylint: disable=unsupported-delete-operation
     mapping.update(b=data_structures.Mapping())
     with self.assertRaises(ValueError):
       mapping.update({"b": data_structures.Mapping()})
@@ -519,7 +515,7 @@ class TupleTests(test.TestCase, parameterized.TestCase):
   def testJSONSerialization(self):
     obj = tracking.AutoTrackable()
     obj.l = (1,)
-    json.dumps(obj.l, default=json_utils.get_json_type)
+    json.dumps(obj.l, default=serialization.get_json_type)
 
   def testNonLayerVariables(self):
     v = resource_variable_ops.ResourceVariable([1.])
@@ -613,6 +609,14 @@ class TupleTests(test.TestCase, parameterized.TestCase):
     self.assertIs(
         v, m._checkpoint_dependencies[0].ref._checkpoint_dependencies[0].ref)
     self.assertEqual(2, m.nt.y)
+
+  def testNamedTupleConflictingAttributes(self):
+    named = collections.namedtuple("Named", ("x", "weights"))
+    v = variables.Variable(2)
+    nt = named(x=v, weights=3)
+    m = module.Module()
+    m.nt = nt
+    self.assertEqual(3, m.nt.weights)
 
   def testNamedSubclassing(self):
     named = collections.namedtuple("Named", ("x", "y"))

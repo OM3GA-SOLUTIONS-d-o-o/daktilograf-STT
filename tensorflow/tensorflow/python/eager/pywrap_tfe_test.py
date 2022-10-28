@@ -14,10 +14,6 @@
 # ==============================================================================
 """Tests for low-level eager execution primitives."""
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import sys
 import traceback
 
@@ -41,6 +37,7 @@ from tensorflow.python.ops import random_ops
 from tensorflow.python.ops import resource_variable_ops
 
 
+@test_util.with_eager_op_as_function
 class Tests(test.TestCase):
 
   @test_util.assert_no_new_tensors
@@ -226,14 +223,45 @@ class Tests(test.TestCase):
 
   @test_util.assert_no_new_tensors
   @test_util.assert_no_garbage_created
+  def testFastPathExecute_VeryLargeOutputs(self):
+    split_dim = constant_op.constant(0, dtype=dtypes.int32)
+    value = constant_op.constant([0, 1, 2, 3], dtype=dtypes.float32)
+    ctx = context.context()
+    ctx.ensure_initialized()
+
+    with self.assertRaisesRegex(ValueError, "Number of outputs is too big"):
+      pywrap_tfe.TFE_Py_FastPathExecute(ctx, "Split", None, split_dim, value,
+                                        "num_split", 1000000000000)
+
+  @test_util.assert_no_new_tensors
+  @test_util.assert_no_garbage_created
+  def testSlowPathExecute_VeryLargeOutputs(self):
+    split_dim = constant_op.constant(0, dtype=dtypes.int32)
+    value = [0, 1, 2, 3]
+    ctx = context.context()
+    ctx.ensure_initialized()
+
+    with self.assertRaises(core._FallbackException):
+      pywrap_tfe.TFE_Py_FastPathExecute(ctx, "Split", None, split_dim, value,
+                                        "num_split", 1000000000000)
+
+    value = constant_op.constant(value)
+    attrs = ("num_split", 1000000000000, "T", value.dtype.as_datatype_enum)
+    with self.assertRaisesRegex(ValueError, "Number of outputs is too big"):
+      pywrap_tfe.TFE_Py_Execute(ctx._handle, None, "Split", [split_dim, value],
+                                attrs, 1000000000000)
+
+  @test_util.assert_no_new_tensors
+  @test_util.assert_no_garbage_created
   def testInvalidNumOutputs(self):
     with self.assertRaisesRegex(
-        Exception, r"Value for number_attr\(\) -1 < 0 \[Op:Split\]"):
+        Exception, r"Value for number_attr\(\) -1 < 0 \[Op:Split\]|"
+        r"Value for attr 'num_split' of -1 must be at least minimum 1"):
       array_ops.split(value=[1, 2, 3], num_or_size_splits=-1)
 
     with self.assertRaisesRegex(
         Exception,
-        "Value for attr 'num_split' of 0 must be at least minimum 1"):
+        r"Value for attr 'num_split' of 0 must be at least minimum 1"):
       array_ops.split(value=[1, 2, 3], num_or_size_splits=0)
 
   def testIsFunction(self):
@@ -267,8 +295,11 @@ class Tests(test.TestCase):
                                         False)
 
   def testOpDefDefaultType(self):
-    im = np.random.randint(
-        low=0, high=65535, size=100, dtype=np.uint16).reshape(10, 10, 1)
+    im = np.random.randint(  # pylint: disable=too-many-function-args
+        low=0,
+        high=65535,
+        size=100,
+        dtype=np.uint16).reshape(10, 10, 1)
 
     context.ensure_initialized()
 
@@ -337,6 +368,20 @@ class Tests(test.TestCase):
           traceback.format_exception(etype, value, tb))
 
     self.assertNotRegex(full_exception_text, "_FallbackException")
+
+  def testIntAttrThatDoesNotFitIn32Bits(self):
+    # Tests bug where int attributes >= 2**31 raised an exception on platforms
+    # where sizeof(long) = 32 bits.
+    ctx = context.context()
+    ctx.ensure_initialized()
+    shape = constant_op.constant([10])
+    minval = constant_op.constant(0)
+    maxval = constant_op.constant(10)
+    seed = 2**50
+    pywrap_tfe.TFE_Py_FastPathExecute(ctx, "RandomUniformInt", None,
+                                      shape, minval, maxval,
+                                      "seed", seed)
+
 
 if __name__ == "__main__":
   test.main()

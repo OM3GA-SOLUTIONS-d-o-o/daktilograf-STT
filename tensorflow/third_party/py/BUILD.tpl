@@ -54,6 +54,15 @@ cc_library(
     includes = ["python_include"],
 )
 
+# This alias is exists for the use of targets in the @llvm-project dependency,
+# which expect a python_headers target called @python_runtime//:headers. We use
+# a repo_mapping to alias python_runtime to this package, and an alias to create
+# the correct target.
+alias(
+    name = "headers",
+    actual = ":python_headers",
+)
+
 cc_library(
     name = "numpy_headers",
     hdrs = [":numpy_include"],
@@ -67,4 +76,5 @@ config_setting(
 )
 
 %{PYTHON_INCLUDE_GENRULE}
+%{NUMPY_INCLUDE_GENRULE}
 %{PYTHON_IMPORT_LIB_GENRULE}

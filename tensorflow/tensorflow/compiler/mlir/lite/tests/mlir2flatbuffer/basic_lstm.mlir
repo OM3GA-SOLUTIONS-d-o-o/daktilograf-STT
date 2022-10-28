@@ -1,6 +1,6 @@
 // RUN: flatbuffer_translate -mlir-to-tflite-flatbuffer %s -o - | flatbuffer_to_string - | FileCheck %s
 
-func @main(tensor<1x384xf32>, tensor<1x96xf32>, tensor<384x480xf32>, tensor<384xf32>, tensor<1x96xf32>) -> tensor<1x96xf32> {
+func.func @main(tensor<1x384xf32>, tensor<1x96xf32>, tensor<384x480xf32>, tensor<384xf32>, tensor<1x96xf32>) -> tensor<1x96xf32> {
 // CHECK: {
 // CHECK-NEXT:  version: 3,
 // CHECK-NEXT:  operator_codes: [ {
@@ -84,7 +84,8 @@ func @main(tensor<1x384xf32>, tensor<1x96xf32>, tensor<384x480xf32>, tensor<384x
 // CHECK-NEXT:        cell_clip: 1.0,
 // CHECK-NEXT:        proj_clip: 2.0,
 // CHECK-NEXT:        kernel_type: BASIC
-// CHECK-NEXT:      }
+// CHECK-NEXT:      },
+// CHECK-NEXT:      intermediates: [ ]
 // CHECK-NEXT:    } ],
 // CHECK-NEXT:    name: "main"
 // CHECK-NEXT:  } ],
@@ -121,5 +122,5 @@ func @main(tensor<1x384xf32>, tensor<1x96xf32>, tensor<384x480xf32>, tensor<384x
 
 ^bb0(%arg0: tensor<1x384xf32>, %arg1: tensor<1x96xf32>, %arg2: tensor<384x480xf32>, %arg3: tensor<384xf32>, %arg4: tensor<1x96xf32>):
   %0:4 = "tfl.basic_lstm"(%arg0, %arg1, %arg2, %arg3, %arg4) {fused_activation_function = "RELU", cell_clip = 1.0 : f32, proj_clip = 2.0 : f32} : (tensor<1x384xf32>, tensor<1x96xf32>, tensor<384x480xf32>, tensor<384xf32>, tensor<1x96xf32>) -> (tensor<1x96xf32>, tensor<1x96xf32>, tensor<1x480xf32>, tensor<1x384xf32>)
-  return %0#0 : tensor<1x96xf32>
+  func.return %0#0 : tensor<1x96xf32>
 }

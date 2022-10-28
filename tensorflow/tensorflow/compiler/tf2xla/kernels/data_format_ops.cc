@@ -91,15 +91,15 @@ class DataFormatVecPermuteOp : public XlaOpKernel {
       : XlaOpKernel(ctx) {
     OP_REQUIRES_OK(ctx, ctx->GetAttr("src_format", &src_format_));
     OP_REQUIRES(
-        ctx, src_format_.size() == 4,
-        errors::InvalidArgument("Data format should have 4 characters"));
+        ctx, src_format_.size() == 4 || src_format_.size() == 5,
+        errors::InvalidArgument("Data format should have 4 or 5 characters"));
     TensorFormat data_format;
     OP_REQUIRES(ctx, FormatFromString(src_format_, &data_format),
                 errors::InvalidArgument("Invalid data format"));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("dst_format", &dst_format_));
     OP_REQUIRES(
-        ctx, dst_format_.size() == 4,
-        errors::InvalidArgument("Data format should have 4 characters"));
+        ctx, dst_format_.size() == 4 || dst_format_.size() == 5,
+        errors::InvalidArgument("Data format should have 4 or 5 characters"));
     OP_REQUIRES(ctx, FormatFromString(dst_format_, &data_format),
                 errors::InvalidArgument("Invalid data format"));
   }
@@ -112,12 +112,27 @@ class DataFormatVecPermuteOp : public XlaOpKernel {
                     "Input must be a vector or matrix, but got shape ",
                     input_tensor_shape.DebugString()));
     const int dim0 = input_tensor_shape.dim_size(0);
-    OP_REQUIRES(
-        ctx, dim0 == 2 || dim0 == 4,
-        errors::InvalidArgument(
-            "First dimension of input must be of size 4, but got shape ",
-            input_tensor_shape.DebugString()));
-    if (input_rank == 2) {
+
+    const int full_dim_count = src_format_.size();
+    const int spatial_dim_count = full_dim_count - 2;
+
+    if (input_rank == 1) {
+      OP_REQUIRES(ctx,
+                  input_tensor_shape.num_elements() == spatial_dim_count ||
+                      input_tensor_shape.num_elements() == full_dim_count,
+                  errors::InvalidArgument("1D input must be of size ",
+                                          spatial_dim_count, " or ",
+                                          full_dim_count, ", but got shape ",
+                                          input_tensor_shape.DebugString()));
+    } else if (input_rank == 2) {
+      OP_REQUIRES(ctx,
+                  input_tensor_shape.dim_size(0) == spatial_dim_count ||
+                      input_tensor_shape.dim_size(0) == full_dim_count,
+                  errors::InvalidArgument("First dimension of 2D input must be "
+                                          "of size ",
+                                          spatial_dim_count, " or ",
+                                          full_dim_count, ", but got shape ",
+                                          input_tensor_shape.DebugString()));
       OP_REQUIRES(
           ctx, input_tensor_shape.dim_size(1) == 2,
           errors::InvalidArgument(
@@ -127,13 +142,17 @@ class DataFormatVecPermuteOp : public XlaOpKernel {
 
     string src_format_str = src_format_;
     string dst_format_str = dst_format_;
-    if (dim0 == 2) {
-      // If the input is a vector of size 2, treat the two elements as spatial
-      // dimensions.
-      auto keep_only_spatial_dimensions = [](string* format_str) -> void {
-        auto new_end = std::remove_if(
-            format_str->begin(), format_str->end(),
-            [](const char dim) { return dim != 'H' && dim != 'W'; });
+    if (input_tensor_shape.dim_size(0) == spatial_dim_count) {
+      // If the input is a vector of size spatial_dim_count, treat the elements
+      // as spatial dimensions.
+      auto keep_only_spatial_dimensions =
+          [spatial_dim_count](string* format_str) -> void {
+        auto new_end =
+            std::remove_if(format_str->begin(), format_str->end(),
+                           [spatial_dim_count](const char dim) {
+                             return dim != 'H' && dim != 'W' &&
+                                    (spatial_dim_count == 2 || dim != 'D');
+                           });
         format_str->erase(new_end, format_str->end());
       };
       keep_only_spatial_dimensions(&src_format_str);

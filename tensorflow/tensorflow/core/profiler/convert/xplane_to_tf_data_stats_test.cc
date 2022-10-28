@@ -34,10 +34,10 @@ using ::testing::EqualsProto;
 // for _ in dataset:
 //   pass
 TEST(XPlaneToTfDataStatsTest, HostInputPipeline) {
-  constexpr int64 kPrefetchIteratorId = 123;
-  constexpr int64 kRangeIteratorId = 456;
-  constexpr int64 kFirstElementId = 100;
-  constexpr int64 kSecondElementId = 200;
+  constexpr int64_t kPrefetchIteratorId = 123;
+  constexpr int64_t kRangeIteratorId = 456;
+  constexpr int64_t kFirstElementId = 100;
+  constexpr int64_t kSecondElementId = 200;
 
   XPlane host_plane;
   XPlaneBuilder host_plane_builder(&host_plane);
@@ -85,6 +85,7 @@ TEST(XPlaneToTfDataStatsTest, HostInputPipeline) {
           max_latency_ps: 100000000
           iterator_name: "Range"
           iterator_long_name: "Iterator::Prefetch::Range"
+          iterator_latency_ps: 80000000
           suggestion: "See <a href=\"https://www.tensorflow.org/guide/data_performance_analysis\" target=\"_blank\">this</a> for suggestions."
         }
         tf_data_stats: {
@@ -119,6 +120,7 @@ TEST(XPlaneToTfDataStatsTest, HostInputPipeline) {
                 num_slow_calls: 1
                 stats {
                   bottleneck_iterator_id: 456
+                  bottleneck_iterator_latency_ps: 80000000
                   iterator_stats {
                     key: 123,
                     value: {
@@ -144,6 +146,7 @@ TEST(XPlaneToTfDataStatsTest, HostInputPipeline) {
                 }
                 stats {
                   bottleneck_iterator_id: 123
+                  bottleneck_iterator_latency_ps: 20000000
                   iterator_stats {
                     key: 123,
                     value: {
@@ -172,14 +175,14 @@ TEST(XPlaneToTfDataStatsTest, HostInputPipeline) {
           }
         }
         is_input_bound: true
-        summary: "Your profile has a tf.data input pipeline slower than 50 us. Below shows a bottleneck in the slow input pipeline and a suggestion on how to fix it."
+        summary: "Your profile has a tf.data input pipeline slower than 50 us. For each slow input pipeline, below shows a bottleneck in the input pipeline and a suggestion on how to fix it."
       )pb"));
 }
 
 TEST(XPlaneToTfDataStatsTest, DeviceInputPipeline) {
-  constexpr int64 kPrefetchIteratorId = 123;
-  constexpr int64 kRangeIteratorId = 456;
-  constexpr int64 kElementId = 100;
+  constexpr int64_t kPrefetchIteratorId = 123;
+  constexpr int64_t kRangeIteratorId = 456;
+  constexpr int64_t kElementId = 100;
 
   XPlane host_plane;
   XPlaneBuilder host_plane_builder(&host_plane);
@@ -211,7 +214,6 @@ TEST(XPlaneToTfDataStatsTest, DeviceInputPipeline) {
   // Device input pipeline is not considered for bottleneck analysis.
   EXPECT_THAT(
       combined_tf_data_stats, EqualsProto(R"pb(
-        bottleneck_analysis: {}
         tf_data_stats: {
           key: "host1"
           value: {
@@ -244,6 +246,7 @@ TEST(XPlaneToTfDataStatsTest, DeviceInputPipeline) {
                 num_slow_calls: 1
                 stats {
                   bottleneck_iterator_id: 456
+                  bottleneck_iterator_latency_ps: 80000000
                   iterator_stats {
                     key: 123,
                     value: {
@@ -269,6 +272,7 @@ TEST(XPlaneToTfDataStatsTest, DeviceInputPipeline) {
                 }
                 stats {
                   bottleneck_iterator_id: 123
+                  bottleneck_iterator_latency_ps: 30000000
                   iterator_stats {
                     key: 123,
                     value: {
@@ -285,7 +289,7 @@ TEST(XPlaneToTfDataStatsTest, DeviceInputPipeline) {
             }
           }
         }
-        summary: "No tf.data activitiy captured in your profile. If your job uses tf.data, try to capture a longer profile."
+        summary: "No tf.data activity captured in your profile. If your job uses tf.data, try to capture a longer profile."
       )pb"));
 }
 
@@ -296,9 +300,9 @@ TEST(XPlaneToTfDataStatsTest, DeviceInputPipeline) {
 // for _ in dataset:
 //   pass
 TEST(XPlaneToTfDataStatsTest, MapAndBatch) {
-  constexpr int64 kMapAndBatchIteratorId = 123;
-  constexpr int64 kRangeIteratorId = 456;
-  constexpr int64 kElementId = 100;
+  constexpr int64_t kMapAndBatchIteratorId = 123;
+  constexpr int64_t kRangeIteratorId = 456;
+  constexpr int64_t kElementId = 100;
 
   XPlane host_plane;
   XPlaneBuilder host_plane_builder(&host_plane);
@@ -339,6 +343,7 @@ TEST(XPlaneToTfDataStatsTest, MapAndBatch) {
           max_latency_ps: 100000000
           iterator_name: "Range"
           iterator_long_name: "Iterator::MapAndBatch::Range"
+          iterator_latency_ps: 60000000
           suggestion: "See <a href=\"https://www.tensorflow.org/guide/data_performance_analysis\" target=\"_blank\">this</a> for suggestions."
         }
         tf_data_stats: {
@@ -373,6 +378,7 @@ TEST(XPlaneToTfDataStatsTest, MapAndBatch) {
                 num_slow_calls: 1
                 stats {
                   bottleneck_iterator_id: 456
+                  bottleneck_iterator_latency_ps: 60000000
                   iterator_stats {
                     key: 123,
                     value: {
@@ -401,7 +407,7 @@ TEST(XPlaneToTfDataStatsTest, MapAndBatch) {
           }
         }
         is_input_bound: true
-        summary: "Your profile has a tf.data input pipeline slower than 50 us. Below shows a bottleneck in the slow input pipeline and a suggestion on how to fix it."
+        summary: "Your profile has a tf.data input pipeline slower than 50 us. For each slow input pipeline, below shows a bottleneck in the input pipeline and a suggestion on how to fix it."
       )pb"));
 }
 

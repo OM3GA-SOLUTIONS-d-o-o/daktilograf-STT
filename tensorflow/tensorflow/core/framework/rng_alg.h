@@ -18,13 +18,29 @@ limitations under the License.
 
 namespace tensorflow {
 
-enum Algorithm { RNG_ALG_PHILOX = 1, RNG_ALG_THREEFRY = 2 };
+enum Algorithm {
+  // The Philox algorithm, as described in paper
+  // ['Parallel Random Numbers: As Easy as 1, 2, 3']
+  // (https://www.thesalmons.org/john/random123/papers/random123sc11.pdf)
+  RNG_ALG_PHILOX = 1,
+  // The ThreeFry algorithm, as described in paper
+  // ['Parallel Random Numbers: As Easy as 1, 2, 3']
+  // (https://www.thesalmons.org/john/random123/papers/random123sc11.pdf)
+  RNG_ALG_THREEFRY = 2,
+  // An algorithm auto-selected by the system according to device type.
+  RNG_ALG_AUTO_SELECT = 3
+};
 
 static constexpr int RNG_KEY_SIZE = 1;
 static constexpr int RNG_MAX_COUNTER_SIZE = 2;
+// Gets the counter size (in unit of uint64) for a counter-based RNG
+// algorithm `alg`. In the case of RNG_ALG_AUTO_SELECT, gets the minimal
+// counter size among all algorithms.
 inline int GetCounterSize(Algorithm alg) {
   if (alg == RNG_ALG_PHILOX) {
     return 2;
+  } else if (alg == RNG_ALG_THREEFRY) {
+    return 1;
   }
   return 1;
 }

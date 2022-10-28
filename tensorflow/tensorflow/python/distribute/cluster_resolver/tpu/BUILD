@@ -10,13 +10,13 @@ package(
     default_visibility = [
         "//tensorflow:internal",
     ],
-    licenses = ["notice"],  # Apache 2.0
+    licenses = ["notice"],
 )
 
 py_library(
     name = "tpu_cluster_resolver_py",
     srcs = ["tpu_cluster_resolver.py"],
-    srcs_version = "PY2AND3",
+    srcs_version = "PY3",
     deps = [
         "//tensorflow/python:training_server_lib",
         "//tensorflow/python/distribute/cluster_resolver:base_cluster_resolver_py",
@@ -32,7 +32,6 @@ tf_py_test(
     grpc_enabled = True,
     main = "tpu_cluster_resolver_test.py",
     python_version = "PY3",
-    tfrt_enabled = True,
     deps = [
         ":tpu_cluster_resolver_py",
         "//tensorflow/python:client_testlib",

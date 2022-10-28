@@ -1,7 +1,7 @@
 load("//tensorflow:tensorflow.bzl", "py_test")
 
 package(
-    licenses = ["notice"],  # Apache 2.0
+    licenses = ["notice"],
 )
 
 filegroup(
@@ -26,7 +26,7 @@ py_library(
         "reaching_fndefs.py",
         "type_inference.py",
     ],
-    srcs_version = "PY2AND3",
+    srcs_version = "PY3",
     visibility = ["//visibility:public"],
     deps = [
         "//tensorflow/python:util",
@@ -40,43 +40,8 @@ py_test(
     name = "activity_test",
     srcs = ["activity_test.py"],
     python_version = "PY3",
-    srcs_version = "PY2AND3",
-    deps = [
-        ":static_analysis",
-        "//tensorflow/python:client_testlib",
-        "//tensorflow/python/autograph/pyct",
-        "@gast_archive//:gast",
-    ],
-)
-
-py_library(
-    name = "activity_test_lib",
-    testonly = True,
-    srcs = ["activity_test.py"],
-    srcs_version = "PY2AND3",
-    deps = [
-        ":static_analysis",
-        "//tensorflow/python:client_testlib",
-        "//tensorflow/python/autograph/pyct",
-        "@gast_archive//:gast",
-    ],
-)
-
-py_test(
-    name = "activity_py3_test",
-    srcs = ["activity_py3_test.py"],
-    python_version = "PY3",
     srcs_version = "PY3",
-    tags = [
-        "no_oss_py2",
-        "no_oss_py35",
-        # TODO(mdan): Remove this tag once no_oss_py35 is properly supported.
-        "no_oss",
-        "no_pip",
-        "nopip",
-    ],
     deps = [
-        ":activity_test_lib",
         ":static_analysis",
         "//tensorflow/python:client_testlib",
         "//tensorflow/python/autograph/pyct",

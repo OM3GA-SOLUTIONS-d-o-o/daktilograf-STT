@@ -13,16 +13,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef TENSORFLOW_COMPILER_MLIR_HLO_INCLUDE_MLIR_HLO_UTILS_BROADCAST_UTILS_H_
-#define TENSORFLOW_COMPILER_MLIR_HLO_INCLUDE_MLIR_HLO_UTILS_BROADCAST_UTILS_H_
+#ifndef MLIR_HLO_UTILS_BROADCAST_UTILS_H
+#define MLIR_HLO_UTILS_BROADCAST_UTILS_H
 
 // Utilities relating to implementing HLO broadcasting.
 // Note: This file should not depend on any non-MLIR TensorFlow libraries.
 
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Location.h"
-#include "mlir/IR/StandardTypes.h"
 #include "mlir/Interfaces/InferTypeOpInterface.h"
 #include "mlir/Support/LLVM.h"
 
@@ -37,15 +37,18 @@ bool IsLegalNumpyRankedBroadcast(Value lhs, Value rhs,
                                  DenseIntElementsAttr broadcast_dims);
 
 // Emits shape dialect ops to compute the result shape for a broadcasting
-// binary elementwise op which broadcasts according to "numpy" semantics
-// (see above), returning a `shape.shape` or an extent tensor of the resulting
-// shape. The result should only be an extent tensor in contexts that ensure
-// both operands to be broadcastable.
-Value ComputeBinaryElementwiseBroadcastingResultExtents(
-    Location loc, Value lhs, Value rhs, OpBuilder& builder,
-    bool unsafe_as_extent_tensor);
+// binary/n-ary elementwise op which broadcasts according to "numpy" semantics
+// (see above), returning an extent tensor of the resulting shape. The function
+// should only be used in contexts that ensure both operands to be
+// broadcastable.
+Value ComputeBinaryElementwiseBroadcastingResultExtents(Location loc, Value lhs,
+                                                        Value rhs,
+                                                        OpBuilder& builder);
+Value ComputeNaryElementwiseBroadcastingResultExtents(Location loc,
+                                                      ValueRange operands,
+                                                      OpBuilder& builder);
 
 }  // namespace hlo
 }  // namespace mlir
 
-#endif  // TENSORFLOW_COMPILER_MLIR_HLO_INCLUDE_MLIR_HLO_UTILS_BROADCAST_UTILS_H_
+#endif  // MLIR_HLO_UTILS_BROADCAST_UTILS_H

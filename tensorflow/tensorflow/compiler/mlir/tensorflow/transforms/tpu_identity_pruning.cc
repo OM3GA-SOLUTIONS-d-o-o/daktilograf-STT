@@ -18,8 +18,8 @@ limitations under the License.
 
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
-#include "mlir/IR/Function.h"  // from @llvm-project
-#include "mlir/IR/Module.h"  // from @llvm-project
+#include "mlir/Dialect/Func/IR/FuncOps.h"  // from @llvm-project
+#include "mlir/IR/BuiltinOps.h"  // from @llvm-project
 #include "mlir/IR/Operation.h"  // from @llvm-project
 #include "mlir/IR/Region.h"  // from @llvm-project
 #include "mlir/Interfaces/CallInterfaces.h"  // from @llvm-project
@@ -28,6 +28,7 @@ limitations under the License.
 #include "mlir/Support/LLVM.h"  // from @llvm-project
 #include "tensorflow/compiler/mlir/tensorflow/ir/tf_device.h"
 #include "tensorflow/compiler/mlir/tensorflow/ir/tf_ops.h"
+#include "tensorflow/compiler/mlir/tensorflow/transforms/passes_detail.h"
 
 namespace mlir {
 namespace TFTPU {
@@ -42,7 +43,7 @@ namespace {
 // are used to propagate such information.
 
 struct TPUIdentityPruning
-    : public PassWrapper<TPUIdentityPruning, OperationPass<ModuleOp>> {
+    : public TF::TPUIdentityPruningPassBase<TPUIdentityPruning> {
   void runOnOperation() override;
 };
 
@@ -104,10 +105,6 @@ void TPUIdentityPruning::runOnOperation() {
 std::unique_ptr<OperationPass<ModuleOp>> CreateTPUIdentityPruningPass() {
   return std::make_unique<TPUIdentityPruning>();
 }
-
-static PassRegistration<TPUIdentityPruning> pass(
-    "tf-tpu-identity-pruning",
-    "Removes Identity/IdentityN ops from the TPU computation");
 
 }  // namespace TFTPU
 }  // namespace mlir

@@ -27,8 +27,9 @@ limitations under the License.
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"  // from @llvm-project
 #include "mlir/IR/Builders.h"  // from @llvm-project
-#include "mlir/IR/Module.h"  // from @llvm-project
+#include "mlir/IR/BuiltinOps.h"  // from @llvm-project
 #include "mlir/IR/UseDefLists.h"  // from @llvm-project
 #include "mlir/Support/LLVM.h"  // from @llvm-project
 #include "tensorflow/compiler/mlir/tensorflow/ir/tf_ops.h"
@@ -67,7 +68,6 @@ LogicalResult LiftVariablesFromSession(
     ModuleOp module, Session* session,
     const SmallSet<StringRef, 4>& resource_names) {
   OpBuilder builder(module.getBodyRegion());
-  MLIRContext* context = module.getContext();
 
   if (!session) return module.emitOpError() << "no session provided";
 
@@ -137,7 +137,7 @@ LogicalResult LiftVariablesFromSession(
     ElementsAttr tensor_attr = tensor_attr_or.ValueOrDie();
 
     builder.create<tf_saved_model::GlobalTensorOp>(
-        NameLoc::get(builder.getIdentifier(name.str()), context),
+        NameLoc::get(builder.getStringAttr(name.str())),
         builder.getStringAttr(name), tensor_attr,
         TypeAttr::get(tensor_attr.getType()), builder.getUnitAttr());
   }
@@ -150,7 +150,7 @@ LogicalResult LiftVariablesFromSession(
 LogicalResult LiftVariables(ModuleOp module, Session* session) {
   MLIRContext* context = module.getContext();
   mlir::Builder builder(context);
-  Identifier resource_name_id = builder.getIdentifier(kResourceNameArgAttr);
+  StringAttr resource_name_id = builder.getStringAttr(kResourceNameArgAttr);
 
   SmallSet<StringRef, 4> resource_names;
 
@@ -162,7 +162,7 @@ LogicalResult LiftVariables(ModuleOp module, Session* session) {
 
       StringRef resource_name = resource_arg.getValue();
       auto flat_symbol_ref_attr =
-          FlatSymbolRefAttr::get(resource_name, context);
+          FlatSymbolRefAttr::get(context, resource_name);
 
       // Add the corresponding `tf_saved_model.bound_input` attribute.
       func.setArgAttr(i, kSavedModelArgAttr, flat_symbol_ref_attr);
@@ -213,9 +213,9 @@ LogicalResult LiftVariables(ModuleOp module, Session* session) {
     }
 
     // Update the function type.
-    func.setType(mlir::FunctionType::get(func.getArgumentTypes(),
-                                         func.getType().getResults(),
-                                         module.getContext()));
+    func.setType(mlir::FunctionType::get(module.getContext(),
+                                         func.getBody().getArgumentTypes(),
+                                         func.getFunctionType().getResults()));
   }
   return success();
 }

@@ -22,17 +22,16 @@ limitations under the License.
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/raw_ostream.h"
-#include "mlir/Dialect/StandardOps/IR/Ops.h"  // from @llvm-project
+#include "mlir/Dialect/Func/IR/FuncOps.h"  // from @llvm-project
 #include "mlir/IR/Attributes.h"  // from @llvm-project
 #include "mlir/IR/Builders.h"  // from @llvm-project
-#include "mlir/IR/Function.h"  // from @llvm-project
-#include "mlir/IR/Identifier.h"  // from @llvm-project
+#include "mlir/IR/BuiltinOps.h"  // from @llvm-project
+#include "mlir/IR/BuiltinTypes.h"  // from @llvm-project
 #include "mlir/IR/Location.h"  // from @llvm-project
 #include "mlir/IR/MLIRContext.h"  // from @llvm-project
 #include "mlir/IR/Matchers.h"  // from @llvm-project
 #include "mlir/IR/OpDefinition.h"  // from @llvm-project
 #include "mlir/IR/Operation.h"  // from @llvm-project
-#include "mlir/IR/StandardTypes.h"  // from @llvm-project
 #include "mlir/IR/Types.h"  // from @llvm-project
 #include "mlir/IR/Value.h"  // from @llvm-project
 #include "mlir/Support/LLVM.h"  // from @llvm-project
@@ -63,11 +62,11 @@ inline OpaqueElementsAttr CustomOption(OpBuilder* builder,
 }
 
 inline TensorType GetInputType(FuncOp func, int idx) {
-  return func.getType().getInput(idx).dyn_cast_or_null<TensorType>();
+  return func.getFunctionType().getInput(idx).dyn_cast_or_null<TensorType>();
 }
 
 inline TensorType GetResultType(FuncOp func, int idx) {
-  return func.getType().getResult(idx).dyn_cast_or_null<TensorType>();
+  return func.getFunctionType().getResult(idx).dyn_cast_or_null<TensorType>();
 }
 
 inline bool RankEquals(const TensorType& type, int rank) {
@@ -133,13 +132,13 @@ LogicalResult ConvertWhitespaceTokenizer(FuncOp func, llvm::StringRef api,
                                          FuncAttr attr) {
   func.eraseBody();
   func.addEntryBlock();
-  func.setAttr(kTFImplements, attr);
+  func->setAttr(kTFImplements, attr);
   OpBuilder builder(func.getBody());
   std::string empty_option_buffer;
   auto op = builder.create<CustomOp>(
-      func.getLoc(), func.getType().getResults(), func.getArguments(), api,
-      CustomOption(&builder, empty_option_buffer));
-  builder.create<ReturnOp>(func.getLoc(), op.getResults());
+      func.getLoc(), func.getFunctionType().getResults(), func.getArguments(),
+      api, CustomOption(&builder, empty_option_buffer));
+  builder.create<func::ReturnOp>(func.getLoc(), op.getResults());
   return success();
 }
 
@@ -150,11 +149,12 @@ LogicalResult VerifyNgrams(FuncOp func) {
   constexpr int kValues = 0;
   constexpr int kRowSplits = 1;
 
-  if (func.getType().getInputs().size() != func.getType().getResults().size()) {
+  if (func.getFunctionType().getInputs().size() !=
+      func.getFunctionType().getResults().size()) {
     return func.emitError() << "Mismatched number of inputs and outputs.";
   }
 
-  int row_splits = func.getType().getInputs().size() - kRowSplits;
+  int row_splits = func.getFunctionType().getInputs().size() - kRowSplits;
   if (row_splits == 0) {
     auto input_values = GetInputType(func, kValues);
     if (!input_values || !input_values.getElementType().isa<StringType>()) {
@@ -256,23 +256,23 @@ LogicalResult CreateNgramsCustomOption(FuncOp func, DictionaryAttr attrs,
 LogicalResult ConvertNgrams(FuncOp func, llvm::StringRef api, FuncAttr attr) {
   func.eraseBody();
   func.addEntryBlock();
-  func.setAttr(kTFImplements, attr);
+  func->setAttr(kTFImplements, attr);
   OpBuilder builder(func.getBody());
   std::string custom_option_buffer;
-  if (failed(CreateNgramsCustomOption(func, attr.GetAttrs(),
+  if (failed(CreateNgramsCustomOption(func, attr.getAttrs(),
                                       custom_option_buffer))) {
     return failure();
   }
   auto op = builder.create<CustomOp>(
-      func.getLoc(), func.getType().getResults(), func.getArguments(), api,
-      CustomOption(&builder, custom_option_buffer));
-  builder.create<ReturnOp>(func.getLoc(), op.getResults());
+      func.getLoc(), func.getFunctionType().getResults(), func.getArguments(),
+      api, CustomOption(&builder, custom_option_buffer));
+  builder.create<func::ReturnOp>(func.getLoc(), op.getResults());
   return success();
 }
 
 LogicalResult VerifySgnnProjection(FuncOp func, FuncAttr attr) {
-  if (func.getType().getNumInputs() != 2 ||
-      func.getType().getNumResults() != 1) {
+  if (func.getFunctionType().getNumInputs() != 2 ||
+      func.getFunctionType().getNumResults() != 1) {
     return func.emitError() << "Mismatched number of inputs and outputs.";
   }
   auto values_type = GetInputType(func, 0);
@@ -286,7 +286,7 @@ LogicalResult VerifySgnnProjection(FuncOp func, FuncAttr attr) {
   }
 
   auto hash_seed =
-      attr.GetAttrs().get("hash_seed").dyn_cast_or_null<ArrayAttr>();
+      attr.getAttrs().get("hash_seed").dyn_cast_or_null<ArrayAttr>();
   if (!hash_seed) {
     return func.emitError()
            << "'hash_seed' attribute is not set or not an array";
@@ -301,7 +301,7 @@ LogicalResult VerifySgnnProjection(FuncOp func, FuncAttr attr) {
            << "Output 2nd dimension should be the num of hash seeds.";
   }
 
-  auto buckets = attr.GetAttrs().get("buckets").dyn_cast_or_null<IntegerAttr>();
+  auto buckets = attr.getAttrs().get("buckets").dyn_cast_or_null<IntegerAttr>();
   if (!buckets) {
     return func.emitError() << "'buckets' attribute is not set or not int";
   }
@@ -336,17 +336,17 @@ LogicalResult ConvertSgnnProjection(FuncOp func, llvm::StringRef api,
   // See more details in tensorflow_models/sequence_projection/sgnn/sgnn.py
   func.eraseBody();
   func.addEntryBlock();
-  func.setAttr(kTFImplements, attr);
+  func->setAttr(kTFImplements, attr);
   OpBuilder builder(func.getBody());
   std::string custom_option_buffer;
-  if (failed(CreateSgnnProjectionCustomOption(func, attr.GetAttrs(),
+  if (failed(CreateSgnnProjectionCustomOption(func, attr.getAttrs(),
                                               custom_option_buffer))) {
     return failure();
   }
   auto op = builder.create<CustomOp>(
-      func.getLoc(), func.getType().getResults(), func.getArguments(), api,
-      CustomOption(&builder, custom_option_buffer));
-  builder.create<ReturnOp>(func.getLoc(), op.getResults());
+      func.getLoc(), func.getFunctionType().getResults(), func.getArguments(),
+      api, CustomOption(&builder, custom_option_buffer));
+  builder.create<func::ReturnOp>(func.getLoc(), op.getResults());
   return success();
 }
 }  // namespace

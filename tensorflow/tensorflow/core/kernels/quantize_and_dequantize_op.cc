@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include "tensorflow/core/framework/op_requires.h"
 #define EIGEN_USE_THREADS
 
 #if (defined(GOOGLE_CUDA) && GOOGLE_CUDA) || \
@@ -71,6 +72,9 @@ class QuantizeAndDequantizeV2Op : public OpKernel {
 
   void Compute(OpKernelContext* ctx) override {
     const Tensor& input = ctx->input(0);
+    OP_REQUIRES(
+        ctx, axis_ >= -1,
+        errors::InvalidArgument("Axis must be at least -1. Found ", axis_));
     OP_REQUIRES(
         ctx, (axis_ == -1 || axis_ < input.shape().dims()),
         errors::InvalidArgument("Shape must be at least rank ", axis_ + 1,
@@ -154,13 +158,30 @@ class QuantizeAndDequantizeV4GradientOp : public OpKernel {
     Tensor* input_backprop = nullptr;
     OP_REQUIRES_OK(ctx,
                    ctx->allocate_output(0, input.shape(), &input_backprop));
+    OP_REQUIRES(
+        ctx, axis_ >= -1,
+        errors::InvalidArgument("Axis must be at least -1. Found ", axis_));
+    OP_REQUIRES(ctx, (axis_ == -1 || axis_ < input.shape().dims()),
+                errors::InvalidArgument(
+                    "Axis should be -1 or 0 or a positive value less than ",
+                    input.shape().dims(), "but given axis value was ", axis_));
 
     OP_REQUIRES(
         ctx, input.IsSameSize(gradient),
         errors::InvalidArgument("gradient and input must be the same size"));
     const int depth = (axis_ == -1) ? 1 : input.dim_size(axis_);
     const Tensor& input_min_tensor = ctx->input(2);
+    OP_REQUIRES(ctx,
+                input_min_tensor.dims() == 0 || input_min_tensor.dims() == 1,
+                errors::InvalidArgument(
+                    "Input min tensor must have dimension 0 or 1. Received ",
+                    input_min_tensor.dims(), "."));
     const Tensor& input_max_tensor = ctx->input(3);
+    OP_REQUIRES(ctx,
+                input_max_tensor.dims() == 0 || input_max_tensor.dims() == 1,
+                errors::InvalidArgument(
+                    "Input max tensor must have dimension 0 or 1. Received ",
+                    input_max_tensor.dims(), "."));
     if (axis_ != -1) {
       OP_REQUIRES(
           ctx, input_min_tensor.dim_size(0) == depth,
@@ -182,6 +203,12 @@ class QuantizeAndDequantizeV4GradientOp : public OpKernel {
                    ctx->allocate_output(2, min_max_shape, &input_max_backprop));
 
     if (axis_ == -1) {
+      OP_REQUIRES(ctx, TensorShapeUtils::IsScalar(input_min_tensor.shape()),
+                  errors::InvalidArgument(
+                      "input_min must be a scalar if axis is unspecified"));
+      OP_REQUIRES(ctx, TensorShapeUtils::IsScalar(input_max_tensor.shape()),
+                  errors::InvalidArgument(
+                      "input_max must be a scalar if axis is unspecified"));
       functor::QuantizeAndDequantizeOneScaleGradientFunctor<Device, T> f;
       f(ctx->eigen_device<Device>(), gradient.template flat<T>(),
         input.template flat<T>(), input_min_tensor.scalar<T>(),
@@ -224,6 +251,10 @@ class QuantizeAndDequantizeV3Op : public OpKernel {
 
   void Compute(OpKernelContext* ctx) override {
     const Tensor& input = ctx->input(0);
+    OP_REQUIRES(ctx, axis_ < input.dims(),
+                errors::InvalidArgument(
+                    "Axis requested is larger than input dimensions. Axis: ",
+                    axis_, " Input Dimensions: ", input.dims()));
     const int depth = (axis_ == -1) ? 1 : input.dim_size(axis_);
     Tensor* output = nullptr;
     OP_REQUIRES_OK(ctx, ctx->allocate_output(0, input.shape(), &output));

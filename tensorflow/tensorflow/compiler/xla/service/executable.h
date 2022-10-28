@@ -36,9 +36,7 @@ limitations under the License.
 #include "tensorflow/compiler/xla/statusor.h"
 #include "tensorflow/compiler/xla/util.h"
 #include "tensorflow/compiler/xla/xla_data.pb.h"
-#include "tensorflow/core/platform/mutex.h"
 #include "tensorflow/core/platform/stream_executor_no_cuda.h"
-#include "tensorflow/core/platform/thread_annotations.h"
 #include "tensorflow/stream_executor/device_memory_allocator.h"
 
 namespace xla {
@@ -232,6 +230,10 @@ class ExecutionOutput {
 // interface that is used for launching compiled programs across platforms.
 class Executable {
  public:
+  explicit Executable(std::shared_ptr<HloModule> hlo_module)
+      : hlo_module_(std::move(hlo_module)) {}
+
+  // TODO(b/172012028): Remove this constructor.
   explicit Executable(
       std::shared_ptr<HloModule> hlo_module,
       std::unique_ptr<HloProfilePrinterData> hlo_profile_printer_data,
@@ -274,7 +276,7 @@ class Executable {
   // If the hlo_execution_profile is provided as non-nullptr, profiling will be
   // enabled. Note that profiling is tricky to use correctly, as the profiling
   // objects (when they exist) must out-live the task.
-  StatusOr<ScopedShapedBuffer> ExecuteAsyncOnStream(
+  virtual StatusOr<ScopedShapedBuffer> ExecuteAsyncOnStream(
       const ServiceExecutableRunOptions* run_options,
       absl::Span<const ShapedBuffer* const> arguments,
       HloExecutionProfile* hlo_execution_profile);
@@ -362,7 +364,7 @@ class Executable {
   // not supported by the executable.
   //
   // Does not include the size of used libraries (e.g. cuDNN, Eigen, etc.).
-  virtual int64 SizeOfGeneratedCodeInBytes() const;
+  virtual int64_t SizeOfGeneratedCodeInBytes() const;
 
   // Dumping helpers.
   void set_hlo_proto(std::unique_ptr<xla::HloProto> hlo_proto) {
@@ -371,6 +373,10 @@ class Executable {
   bool dumping_snapshot() const { return hlo_proto_ != nullptr; }
   HloProto const* hlo_proto() const { return hlo_proto_.get(); }
 
+  std::string& debug_info() { return debug_info_; }
+  void set_debug_info(const std::string& debug_info) {
+    debug_info_ = debug_info;
+  }
   // Gather unused but donated buffers, return them to the caller of this API.
   // We don't free buffers inside this function since the caller could have
   // different preferences for buffer deallocation. For example, in TensorFlow,
@@ -391,10 +397,13 @@ class Executable {
 
   // Execution count, used to generate a unique filename for each dumped
   // execution.
-  int64 execution_count_ = 0;
+  int64_t execution_count_ = 0;
 
   std::unique_ptr<HloProfilePrinterData> hlo_profile_printer_data_;
   std::unique_ptr<HloProfileIndexMap> hlo_profile_index_map_;
+
+  // Generic debug information as a string.
+  std::string debug_info_;
 };
 
 }  // namespace xla

@@ -14,10 +14,6 @@
 # ==============================================================================
 """Base testing class for strategies that require multiple nodes."""
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import contextlib
 import copy
 import json
@@ -91,7 +87,10 @@ def _create_cluster(num_workers,
                     protocol='grpc',
                     worker_config=None,
                     ps_config=None,
-                    eval_config=None):
+                    eval_config=None,
+                    worker_name='worker',
+                    ps_name='ps',
+                    chief_name='chief'):
   """Creates and starts local servers and returns the cluster_spec dict."""
   if _portpicker_import_error:
     raise _portpicker_import_error  # pylint: disable=raising-bad-type
@@ -100,20 +99,20 @@ def _create_cluster(num_workers,
 
   cluster_dict = {}
   if num_workers > 0:
-    cluster_dict['worker'] = ['localhost:%s' % port for port in worker_ports]
+    cluster_dict[worker_name] = ['localhost:%s' % port for port in worker_ports]
   if num_ps > 0:
-    cluster_dict['ps'] = ['localhost:%s' % port for port in ps_ports]
+    cluster_dict[ps_name] = ['localhost:%s' % port for port in ps_ports]
   if has_eval:
     cluster_dict['evaluator'] = ['localhost:%s' % pick_unused_port()]
   if has_chief:
-    cluster_dict['chief'] = ['localhost:%s' % pick_unused_port()]
+    cluster_dict[chief_name] = ['localhost:%s' % pick_unused_port()]
 
   cs = server_lib.ClusterSpec(cluster_dict)
 
   for i in range(num_workers):
     server_lib.Server(
         cs,
-        job_name='worker',
+        job_name=worker_name,
         protocol=protocol,
         task_index=i,
         config=worker_config,
@@ -122,7 +121,7 @@ def _create_cluster(num_workers,
   for i in range(num_ps):
     server_lib.Server(
         cs,
-        job_name='ps',
+        job_name=ps_name,
         protocol=protocol,
         task_index=i,
         config=ps_config,
@@ -131,7 +130,7 @@ def _create_cluster(num_workers,
   if has_chief:
     server_lib.Server(
         cs,
-        job_name='chief',
+        job_name=chief_name,
         protocol=protocol,
         task_index=0,
         config=worker_config,
@@ -159,6 +158,11 @@ def create_in_process_cluster(num_workers,
   gpu_mem_frac = 0.7 / (num_workers + int(has_chief) + int(has_eval))
   worker_config = config_pb2.ConfigProto()
   worker_config.gpu_options.per_process_gpu_memory_fraction = gpu_mem_frac
+
+  # The cluster may hang if workers don't have enough inter_op threads. See
+  # b/172296720 for more details.
+  if worker_config.inter_op_parallelism_threads < num_workers + 1:
+    worker_config.inter_op_parallelism_threads = num_workers + 1
 
   # Enable collective ops which has no impact on non-collective ops.
   # TODO(yuefengz, tucker): removing this after we move the initialization of
@@ -210,10 +214,14 @@ class MultiProcessCluster(object):
   This class is not thread-safe.
   """
 
-  def __init__(self, cluster_resolver):
+  def __init__(self,
+               cluster_resolver,
+               stream_output=False,
+               collective_leader=None):
     self._cluster_resolver = cluster_resolver
     self._cluster_spec = cluster_resolver.cluster_spec().as_dict()
     self._rpc_layer = cluster_resolver.rpc_layer
+    self._stream_output = stream_output
     self._start_events = {}
     self._finish_events = {}
     self._mpr_manager = multi_process_runner.manager()
@@ -225,19 +233,23 @@ class MultiProcessCluster(object):
       task_id = cluster_resolver.task_id
       rpc_layer = cluster_resolver.rpc_layer
 
-      logging.info(
-          'Starting server with cluster_spec = %r, task_type = %r, '
-          'task_id = %r, rpc_layer = %r', cluster_spec, task_type, task_id,
-          rpc_layer)
-
       # TODO(yuefengz): support GPU clusters.
       server_config = config_pb2.ConfigProto()
       server_config.device_count['GPU'] = 0
 
-      # Set the environment variable to prevent hanging upon job failure and
-      # restart. Note that it defaults to 'use_caller' at Google, but defaults
-      # to False in OSS.
-      os.environ['GRPC_FAIL_FAST'] = 'use_caller'
+      if collective_leader:
+        server_config.experimental.collective_group_leader = collective_leader
+        server_config.experimental.collective_nccl = False
+
+        logging.info(
+            'Enabling collective ops with cluster_spec = %r, task_type = %r, '
+            'task_id = %r, rpc_layer = %r, collective_leader = %s',
+            cluster_spec, task_type, task_id, rpc_layer, collective_leader)
+      else:
+        logging.info(
+            'Starting server with cluster_spec = %r, task_type = %r, '
+            'task_id = %r, rpc_layer = %r', cluster_spec, task_type, task_id,
+            rpc_layer)
 
       server_lib.Server(
           cluster_spec,
@@ -277,7 +289,7 @@ class MultiProcessCluster(object):
         self._cluster_spec,
         args=(self._start_events, self._finish_events),
         rpc_layer=self._rpc_layer,
-        stream_output=False,
+        stream_output=self._stream_output,
         return_output=False,
         use_dill_for_args=False)
     self._mpr.start()
@@ -322,7 +334,7 @@ class MultiProcessCluster(object):
       task_id: the id the task such as 1.
 
     Raises:
-      ValueError: if the server alreay exists.
+      ValueError: if the server already exists.
     """
     assert self._mpr
 
@@ -345,7 +357,11 @@ def create_multi_process_cluster(num_workers,
                                  num_ps,
                                  has_chief=False,
                                  has_eval=False,
-                                 rpc_layer='grpc'):
+                                 rpc_layer='grpc',
+                                 stream_output=False,
+                                 collective_leader=None):
+  logging.info('Now creating a MultiProcessCluster with '
+               f'num_workers={num_workers}, num_ps={num_ps}.')
   cluster_spec = create_cluster_spec(
       has_chief=has_chief,
       num_workers=num_workers,
@@ -354,7 +370,9 @@ def create_multi_process_cluster(num_workers,
 
   cluster = MultiProcessCluster(
       SimpleClusterResolver(
-          server_lib.ClusterSpec(cluster_spec), rpc_layer=rpc_layer))
+          server_lib.ClusterSpec(cluster_spec), rpc_layer=rpc_layer),
+      stream_output=stream_output,
+      collective_leader=collective_leader)
   cluster.start()
   return cluster
 
@@ -378,7 +396,7 @@ def create_cluster_spec(has_chief=False,
   This util is useful when creating the `cluster_spec` arg for
   `tf.__internal__.distribute.multi_process_runner.run`.
 
-  Arguments:
+  Args:
     has_chief: Whether the generated cluster spec should contain "chief" task
       type.
     num_workers: Number of workers to use in the cluster spec.
@@ -690,7 +708,7 @@ class IndependentWorkerTestBase(test.TestCase):
     from `cluster_spec`, `task_type`, and `task_id`, and provide it to the new
     thread to be set as `TF_CONFIG` environment.
 
-    Arguments:
+    Args:
       task_fn: The function to run in the new thread.
       cluster_spec: The cluster spec.
       task_type: The task type.
@@ -801,7 +819,7 @@ class MultiWorkerMultiProcessTest(test.TestCase):
     In that case, this function only prints stderr from the first process of
     each type.
 
-    Arguments:
+    Args:
       processes: A dictionary from process type string -> list of processes.
       print_only_first: If true, only print output from first process of each
         type.

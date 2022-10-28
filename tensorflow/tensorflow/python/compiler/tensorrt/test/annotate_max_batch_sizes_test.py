@@ -14,10 +14,6 @@
 # ==============================================================================
 """Testing the impact of graph node _tftrt_op_max_batch_size annotation on TRTEngineOp attributes."""
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import unittest
 
 from tensorflow.core.framework import attr_value_pb2
@@ -59,19 +55,11 @@ class MaxBatchSizesTestBase(trt_test.TfTrtIntegrationTestBase):
     # engines.
     return (not run_params.dynamic_engine, 'test static engine only.')
 
-  def GetConversionParams(self, run_params):
-    """Returns a ConversionParams for test."""
-    conversion_params = super(MaxBatchSizesTestBase,
-                              self).GetConversionParams(run_params)
-    conversion_params._replace(
-        max_batch_size=min(self.max_batch_sizes), maximum_cached_engines=1)
-    rewrite_config_with_trt = self.GetTrtRewriterConfig(
-        run_params=run_params,
-        conversion_params=conversion_params,
-        use_implicit_batch=True,
-        disable_non_trt_optimizers=True)
-    return conversion_params._replace(
-        rewriter_config_template=rewrite_config_with_trt)
+  def GetMaxBatchSize(self, run_params):
+    """Returns the max_batch_size that the converter should use for tests."""
+    if run_params.dynamic_engine:
+      return None
+    return min(self.max_batch_sizes)
 
   def ExpectedEnginesToBuild(self, run_params):
     """Checks that the expected engine is built.
@@ -85,7 +73,7 @@ class MaxBatchSizesTestBase(trt_test.TfTrtIntegrationTestBase):
     There shall be engines generated for each maximum batch size.
     """
     return [
-        'TRTEngineOp_{}'.format(seq_id)
+        f'TRTEngineOp_{seq_id:03d}'
         for seq_id in range(len(self.max_batch_sizes))
     ]
 

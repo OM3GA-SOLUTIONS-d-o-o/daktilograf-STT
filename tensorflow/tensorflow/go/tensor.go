@@ -95,14 +95,17 @@ func NewTensor(value interface{}) (*Tensor, error) {
 		c:     C.TF_AllocateTensor(C.TF_DataType(dataType), shapePtr, C.int(len(shape)), C.size_t(nbytes)),
 		shape: shape,
 	}
-	runtime.SetFinalizer(t, (*Tensor).finalize)
+
 	raw := tensorData(t.c)
+
+	runtime.SetFinalizer(t, (*Tensor).finalize)
+
 	buf := bytes.NewBuffer(raw[:0:len(raw)])
 
 	if isAllArray(val.Type()) {
 		// We have arrays all the way down, or just primitive types. We can
 		// just copy the memory in as it is all contiguous.
-		if err := copyPtr(buf, unpackEFace(value).data, int(val.Type().Size())); err != nil {
+		if _, err := copyPtr(buf, unpackEFace(value).data, int(val.Type().Size())); err != nil {
 			return nil, err
 		}
 	} else {
@@ -110,7 +113,7 @@ func NewTensor(value interface{}) (*Tensor, error) {
 		// not be contiguous with the others or in the order we might
 		// expect, so we need to work our way down to each slice of
 		// primitives and copy them individually
-		if err := encodeTensorWithSlices(buf, val, shape); err != nil {
+		if _, err := encodeTensorWithSlices(buf, val, shape); err != nil {
 			return nil, err
 		}
 	}
@@ -168,11 +171,18 @@ func ReadTensor(dataType DataType, shape []int64, r io.Reader) (*Tensor, error) 
 	if err := isTensorSerializable(dataType); err != nil {
 		return nil, err
 	}
-	nbytes := TypeOf(dataType, nil).Size() * uintptr(numElements(shape))
+
 	var shapePtr *C.int64_t
 	if len(shape) > 0 {
+		for _, dim := range shape {
+			if dim < 0 {
+				return nil, fmt.Errorf("all shape dimentions should be non-negative: %v", shape)
+			}
+		}
 		shapePtr = (*C.int64_t)(unsafe.Pointer(&shape[0]))
 	}
+
+	nbytes := TypeOf(dataType, nil).Size() * uintptr(numElements(shape))
 	t := &Tensor{
 		c:     C.TF_AllocateTensor(C.TF_DataType(dataType), shapePtr, C.int(len(shape)), C.size_t(nbytes)),
 		shape: shape,
@@ -208,25 +218,29 @@ func (t *Tensor) DataType() DataType { return DataType(C.TF_TensorType(t.c)) }
 func (t *Tensor) Shape() []int64 { return t.shape }
 
 // Reshape  updates tensor's shape in place if this is possible or returns an error otherwise.
-func (t *Tensor) Reshape(new_shape []int64) error {
-	old_shape_size := numElements(t.shape)
-	new_shape_size := numElements(new_shape)
+func (t *Tensor) Reshape(newShape []int64) error {
+	oldShapeSize := numElements(t.shape)
+	newShapeSize := numElements(newShape)
 
-	if old_shape_size != new_shape_size {
-		return fmt.Errorf("unable to convert shape %v (num_elements: %d) into shape %v (num_elements: %d)", t.shape, old_shape_size, new_shape, new_shape_size)
+	if oldShapeSize != newShapeSize {
+		return fmt.Errorf("unable to convert shape %v (num_elements: %d) into shape %v (num_elements: %d)", t.shape, oldShapeSize, newShape, newShapeSize)
 	}
 
-	if len(new_shape) == 0 {
+	if len(newShape) == 0 {
 		return nil
 	}
 
 	var shapePtr *C.int64_t
-	shapePtr = (*C.int64_t)(unsafe.Pointer(&new_shape[0]))
+	shapePtr = (*C.int64_t)(unsafe.Pointer(&newShape[0]))
 
 	status := newStatus()
-	C.TF_TensorBitcastFrom(t.c, C.TF_TensorType(t.c), t.c, shapePtr, C.int(len(new_shape)), status.c)
+	C.TF_TensorBitcastFrom(t.c, C.TF_TensorType(t.c), t.c, shapePtr, C.int(len(newShape)), status.c)
 
-	return status.Err()
+	if err := status.Err(); err != nil {
+		return err
+	}
+	t.shape = newShape
+	return nil
 }
 
 // Value converts the Tensor to a Go value. For now, not all Tensor types are
@@ -403,11 +417,17 @@ func shapeAndDataTypeOf(val reflect.Value) (shape []int64, dt DataType, err erro
 	typ := val.Type()
 	for typ.Kind() == reflect.Array || typ.Kind() == reflect.Slice {
 		shape = append(shape, int64(val.Len()))
+		// If slice elements are slices, verify that all of them have the same size.
+		// Go's type system makes that guarantee for arrays.
 		if val.Len() > 0 {
-			// In order to check tensor structure properly in general case we need to iterate over all slices of the tensor to check sizes match
-			// Since we already going to iterate over all elements in encodeTensor() let's
-			// 1) do the actual check in encodeTensor() to save some cpu cycles here
-			// 2) assume the shape is represented by lengths of elements with zero index in each dimension
+			if val.Type().Elem().Kind() == reflect.Slice {
+				expected := val.Index(0).Len()
+				for i := 1; i < val.Len(); i++ {
+					if val.Index(i).Len() != expected {
+						return shape, dt, fmt.Errorf("mismatched slice lengths: %d and %d", val.Index(i).Len(), expected)
+					}
+				}
+			}
 			val = val.Index(0)
 		}
 		typ = typ.Elem()
@@ -458,13 +478,13 @@ func sizeVarUint(v uint64) int {
 
 // encodeTensorWithSlices writes v to the specified buffer using the format specified in
 // c_api.h. Use stringEncoder for String tensors.
-func encodeTensorWithSlices(w *bytes.Buffer, v reflect.Value, shape []int64) error {
+func encodeTensorWithSlices(w *bytes.Buffer, v reflect.Value, shape []int64) (int, error) {
 	// If current dimension is a slice, verify that it has the expected size
 	// Go's type system makes that guarantee for arrays.
 	if v.Kind() == reflect.Slice {
 		expected := int(shape[0])
 		if v.Len() != expected {
-			return fmt.Errorf("mismatched slice lengths: %d and %d", v.Len(), expected)
+			return 0, fmt.Errorf("mismatched slice lengths: %d and %d", v.Len(), expected)
 		}
 	} else if v.Kind() == reflect.String {
 		s := v.Interface().(string)
@@ -473,7 +493,7 @@ func encodeTensorWithSlices(w *bytes.Buffer, v reflect.Value, shape []int64) err
 		ptr := unsafe.Pointer(&tstr)
 		return copyPtr(w, ptr, C.sizeof_TF_TString)
 	} else if v.Kind() != reflect.Array {
-		return fmt.Errorf("unsupported type %v", v.Type())
+		return 0, fmt.Errorf("unsupported type %v", v.Type())
 	}
 
 	// Once we have just a single dimension we can just copy the data
@@ -486,15 +506,17 @@ func encodeTensorWithSlices(w *bytes.Buffer, v reflect.Value, shape []int64) err
 		return copyPtr(w, ptr, v.Len()*int(elt.Type().Size()))
 	}
 
+	n := 0
 	subShape := shape[1:]
 	for i := 0; i < v.Len(); i++ {
-		err := encodeTensorWithSlices(w, v.Index(i), subShape)
+		j, err := encodeTensorWithSlices(w, v.Index(i), subShape)
 		if err != nil {
-			return err
+			return n + j, err
 		}
+		n += j
 	}
 
-	return nil
+	return n, nil
 }
 
 // It isn't safe to use reflect.SliceHeader as it uses a uintptr for Data and
@@ -508,15 +530,14 @@ type sliceHeader struct {
 // copyPtr copies the backing data for a slice or array directly into w. Note
 // we don't need to worry about byte ordering because we want the natural byte
 // order for the machine we're running on.
-func copyPtr(w *bytes.Buffer, ptr unsafe.Pointer, l int) error {
+func copyPtr(w *bytes.Buffer, ptr unsafe.Pointer, l int) (int, error) {
 	// Convert our slice header into a []byte so we can call w.Write
 	b := *(*[]byte)(unsafe.Pointer(&sliceHeader{
 		Data: ptr,
 		Len:  l,
 		Cap:  l,
 	}))
-	_, err := w.Write(b)
-	return err
+	return w.Write(b)
 }
 
 func bug(format string, args ...interface{}) error {

@@ -14,10 +14,6 @@
 # ==============================================================================
 """Core conversion logic, serves as main point of access."""
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import functools
 import inspect
 import sys
@@ -57,7 +53,7 @@ def _is_known_loaded_type(f, module_name, entity_name):
     return True
   # Note: inspect is required here, to avoid unpacking tf.function decorators.
   if inspect.ismethod(f):
-    # The the unbound method if of this type. Example:
+    # The unbound method if of this type. Example:
     #
     # class ClassType:
     #   @function
@@ -76,7 +72,7 @@ def is_unsupported(o):
   # TODO(b/122265385): Remove this bypass.
   if (_is_known_loaded_type(o, 'wrapt', 'FunctionWrapper') or
       _is_known_loaded_type(o, 'wrapt', 'BoundFunctionWrapper')):
-    logging.warn(
+    logging.warning(
         '{} appears to be decorated by wrapt, which is not yet supported'
         ' by AutoGraph. The function will run as-is.'
         ' You may still apply AutoGraph before the wrapt decorator.'.format(o))
@@ -153,9 +149,6 @@ def is_allowlisted(
   # The check for __code__ below is because isgeneratorfunction crashes
   # without one.
   if hasattr(o, '__code__') and tf_inspect.isgeneratorfunction(o):
-    logging.warn(
-        'Entity %s appears to be a generator function. It will not be converted'
-        ' by AutoGraph.', o)
     logging.log(2, 'Allowlisted: %s: generator functions are not converted', o)
     return True
 

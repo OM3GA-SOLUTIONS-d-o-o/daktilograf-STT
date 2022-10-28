@@ -13,14 +13,19 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <utility>
+
 #include "mlir-hlo/Dialect/mhlo/IR/hlo_ops.h"
+#include "mlir-hlo/Dialect/mhlo/transforms/PassDetail.h"
 #include "mlir-hlo/Dialect/mhlo/transforms/rewriters.h"
-#include "mlir/Dialect/StandardOps/IR/Ops.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/IR/Dialect.h"
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/Operation.h"
-#include "mlir/IR/PatternMatch.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
+#include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
 namespace mlir {
 namespace mhlo {
@@ -28,11 +33,17 @@ namespace mhlo {
 namespace {
 
 struct TestUnfuseBatchNormPass
-    : public PassWrapper<TestUnfuseBatchNormPass, OperationPass<>> {
+    : public TestUnfuseBatchNormPassBase<TestUnfuseBatchNormPass> {
+  void getDependentDialects(DialectRegistry& registry) const override {
+    registry.insert<memref::MemRefDialect>();
+  }
   void runOnOperation() override {
-    OwningRewritePatternList patterns;
+    RewritePatternSet patterns(&getContext());
     PopulateUnfuseBatchNormPatterns(&getContext(), &patterns);
-    applyPatternsAndFoldGreedily(getOperation(), patterns);
+    if (failed(applyPatternsAndFoldGreedily(getOperation(),
+                                            std::move(patterns)))) {
+      return signalPassFailure();
+    }
   }
 };
 

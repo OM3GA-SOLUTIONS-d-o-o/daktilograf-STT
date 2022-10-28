@@ -9,7 +9,7 @@ package(
     default_visibility = [
         "//tensorflow/core:__subpackages__",
     ],
-    licenses = ["notice"],  # Apache 2.0
+    licenses = ["notice"],
 )
 
 # Todo(bmzhao): Remaining targets to add to this BUILD file are all tests.
@@ -207,7 +207,6 @@ filegroup(
         "blocking_counter_test.cc",
         "coding_test.cc",
         "notification_test.cc",
-        "refcount_test.cc",
         "status_test.cc",
         "threadpool_test.cc",
     ],
@@ -244,7 +243,11 @@ filegroup(
     srcs = [
         "stringpiece.h",
     ],
-    visibility = ["//tensorflow/core:__pkg__"],
+    visibility = [
+        "//tensorflow/core:__pkg__",
+        "//tensorflow/core/lib/gif:__pkg__",
+        "//tensorflow/core/lib/jpeg:__pkg__",
+    ],
 )
 
 filegroup(

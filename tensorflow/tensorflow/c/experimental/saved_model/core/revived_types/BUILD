@@ -6,8 +6,10 @@ package(
     default_visibility = [
         # Restricting visibility for now
         "//tensorflow/c/experimental/saved_model/core:__pkg__",
+        "//tensorflow/cc/experimental/libtf:__pkg__",
+        "//tensorflow/cc/experimental/libtf:__subpackages__",
     ],
-    licenses = ["notice"],  # Apache 2.0
+    licenses = ["notice"],
 )
 
 cc_library(
@@ -146,6 +148,7 @@ cc_library(
         ":tf_signature_def_function",
         ":variable",
         "//tensorflow/core:lib",
+        "@com_google_absl//absl/container:flat_hash_map",
     ],
 )
 

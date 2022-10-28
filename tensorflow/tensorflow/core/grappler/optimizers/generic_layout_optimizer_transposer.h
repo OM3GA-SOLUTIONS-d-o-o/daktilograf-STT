@@ -51,9 +51,16 @@ struct TransposeContext {
   // Initializes TransposeContext with given GrapplerItem. Because initializing
   // FrameMap and GraphProperties may return error, we initialize
   // TransposeContext outside constructor.
-  static Status InitializeTransposeContext(const GrapplerItem& item,
+  static Status InitializeTransposeContext(bool assume_valid_feeds,
+                                           const GrapplerItem& item,
                                            const Cluster* cluster,
                                            TransposeContext* context);
+
+  static Status InitializeTransposeContext(const GrapplerItem& item,
+                                           const Cluster* cluster,
+                                           TransposeContext* context) {
+    return InitializeTransposeContext(false, item, cluster, context);
+  }
 
   // Sets data formats to convert from and to for specified device type.
   void AssignDeviceAndDataFormats(absl::string_view target_device,
@@ -78,6 +85,8 @@ struct TransposeContext {
   absl::flat_hash_map<char, int> dst_dim_indices;
   std::vector<int> src_to_dst;
   std::vector<int> dst_to_src;
+
+  string enforced_layout;
 };
 
 class Transposer {
@@ -210,6 +219,14 @@ class DefaultLayoutSensitiveOpTransposer : public LayoutSensitiveOpTransposer {
                        utils::MutableNodeView* node) override;
 };
 
+class BiasAddTransposer : public LayoutSensitiveOpTransposer {
+ public:
+  explicit BiasAddTransposer() : LayoutSensitiveOpTransposer() {}
+
+  Status TransposeNode(TransposeContext* context,
+                       utils::MutableNodeView* node) override;
+};
+
 class AvgPoolGradTransposer : public LayoutSensitiveOpTransposer {
  public:
   explicit AvgPoolGradTransposer() : LayoutSensitiveOpTransposer() {}
@@ -319,9 +336,9 @@ class LayoutAgnosticOpTransposer : public Transposer {
   bool IsAfterDstToSrcTransform(const TransposeContext& context,
                                 const utils::MutableNodeView& node) const;
 
-  std::vector<int> GetVariadic4DFaninPorts(
-      const TransposeContext& context,
-      const utils::MutableNodeView& node) const;
+  std::vector<int> GetVariadicNDFaninPorts(const TransposeContext& context,
+                                           const utils::MutableNodeView& node,
+                                           int rank) const;
 };
 
 class DefaultLayoutAgnosticOpTransposer : public LayoutAgnosticOpTransposer {
@@ -422,7 +439,7 @@ class ReduceTransposer : public LayoutAgnosticOpTransposer {
   bool KeepDims(const utils::MutableNodeView& node);
   bool IsAlongAxis(const Tensor& tensor, absl::Span<const int> axis, int rank);
   bool IsReduceAxisSupported(const TransposeContext& context,
-                             const utils::MutableNodeView& node);
+                             const utils::MutableNodeView& node, int rank);
 };
 
 class ReverseV2Transposer : public LayoutAgnosticOpTransposer {

@@ -23,8 +23,8 @@ limitations under the License.
 #include "tensorflow/core/framework/function.h"
 #include "tensorflow/core/tpu/kernels/tpu_compilation_cache_key.h"
 #include "tensorflow/core/tpu/kernels/tpu_compile_op_common.h"
-#include "tensorflow/core/tpu/kernels/tpu_mesh_state_c_api.h"
 #include "tensorflow/core/tpu/kernels/tpu_program_group_interface.h"
+#include "tensorflow/core/tpu/tpu_ops_c_api.h"
 
 namespace tensorflow {
 namespace tpu {
@@ -55,6 +55,7 @@ class TpuCompileOpKernelImpl : public TpuCompileOpKernelCommon {
       const absl::variant<MlirToHloArgs, FunctionToHloArgs>& computation,
       const XLA_TpuMeshState* mesh_state,
       const std::vector<TensorShape>& arg_shapes,
+      const TpuCompilationCacheKey* key,
       TpuProgramGroupInterface* tpu_program_group) override;
 };
 }  // namespace tpu

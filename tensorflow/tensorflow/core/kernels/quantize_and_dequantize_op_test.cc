@@ -97,10 +97,10 @@ TEST_F(QuantizeAndDequantizeTest, Convert_scalar_tensor_V3) {
 // Creates a tensor with the specified dims, using values chosen from data,
 // multiplied by (1 + index) along the axis dimension.
 template <typename T>
-std::vector<T> ScalePerSliceAlongAxis(std::vector<int64> dims, int axis,
+std::vector<T> ScalePerSliceAlongAxis(std::vector<int64_t> dims, int axis,
                                       const std::vector<T>& data) {
   uint32 seed = 123;
-  int64 out_size = 1;
+  int64_t out_size = 1;
   for (int dim : dims) {
     out_size *= dim;
   }
@@ -132,7 +132,7 @@ TEST_P(ParameterizedQuantizeAndDequantizeTest, Convert_4D_tensor_with_int8) {
           .Attr("axis", axis)
           .Finalize(node_def()));
   TF_ASSERT_OK(InitOp());
-  const std::vector<int64> dims = {2, 3, 4, 5};
+  const std::vector<int64_t> dims = {2, 3, 4, 5};
   // Each slice contains the same 7 values multiplied by (slice_idx + 1).
   AddInputFromArray<float>(
       TensorShape(dims),
@@ -183,7 +183,7 @@ TEST_P(ParameterizedQuantizeAndDequantizeTest,
           .Attr("axis", axis)
           .Finalize(node_def()));
   TF_ASSERT_OK(InitOp());
-  const std::vector<int64> dims = {5, 7, 11, 13};
+  const std::vector<int64_t> dims = {5, 7, 11, 13};
   // Each slice contains the same 7 values multiplied by (slice_idx + 1).
   AddInputFromArray<float>(
       TensorShape(dims),
@@ -237,7 +237,7 @@ TEST_P(ParameterizedQuantizeAndDequantizeTest,
           .Attr("axis", axis)
           .Finalize(node_def()));
   TF_ASSERT_OK(InitOp());
-  const std::vector<int64> dims = {2, 3, 4, 5};
+  const std::vector<int64_t> dims = {2, 3, 4, 5};
   // Each slice contains the same 7 values multiplied by (slice_idx + 1).
   AddInputFromArray<float>(
       TensorShape(dims),
@@ -320,7 +320,7 @@ TEST_P(ParameterizedQuantizeAndDequantizeTest,
           .Attr("axis", axis)
           .Finalize(node_def()));
   TF_ASSERT_OK(InitOp());
-  const std::vector<int64> dims = {2, 3, 4, 5};
+  const std::vector<int64_t> dims = {2, 3, 4, 5};
   // Each slice contains the same 7 values multiplied by (slice_idx + 1).
   AddInputFromArray<float>(
       TensorShape(dims),
@@ -341,7 +341,7 @@ TEST_P(ParameterizedQuantizeAndDequantizeTest,
   // Then it is dequantized to:
   //   (slice_idx + 1) * {-1, -63.0/127, 0, 38.0/127, 102.0/127, 70/127, 64/127}
 
-  // With int8, each slice of the the tensor is quantized to
+  // With int8, each slice of the tensor is quantized to
   // {-127, -64, 0, 38, 102, 70, 64}.
   // Scale is: (slice_idx + 1) / 127
   // Then it is dequantized to:
@@ -373,7 +373,7 @@ TEST_P(ParameterizedQuantizeAndDequantizeTest, GradientV4_op) {
                    .Attr("axis", axis)
                    .Finalize(node_def()));
   TF_ASSERT_OK(InitOp());
-  const std::vector<int64> dims = {2, 3, 4, 5};
+  const std::vector<int64_t> dims = {2, 3, 4, 5};
   // Input gradient. (repeating 11 values multiplied by (slice_idx + 1))
   auto gradients = ScalePerSliceAlongAxis<float>(
       dims, axis, {1, -2, -3, 4, 5, 6, -7, -8, -9, -10, 11});
@@ -759,15 +759,16 @@ TEST_F(QuantizeAndDequantizeTest, Invalid_range_given_V3) {
       << s;
 }
 
-#define BM_SIMPLE_QUAN_DEQUAN(DEVICE)                     \
-  static void BM_SIMPLE_QUAN_DEQUAN_##DEVICE(int iters) { \
-    auto root = Scope::NewRootScope().ExitOnError();      \
-    ops::QuantizeAndDequantizeV2(root, -3.5, -3.5, -3.5); \
-    TF_CHECK_OK(root.status());                           \
-    Graph* g = new Graph(OpRegistry::Global());           \
-    TF_CHECK_OK(root.ToGraph(g));                         \
-    test::Benchmark(#DEVICE, g).Run(iters);               \
-  }                                                       \
+#define BM_SIMPLE_QUAN_DEQUAN(DEVICE)                                    \
+  static void BM_SIMPLE_QUAN_DEQUAN_##DEVICE(                            \
+      ::testing::benchmark::State& state) {                              \
+    auto root = Scope::NewRootScope().ExitOnError();                     \
+    ops::QuantizeAndDequantizeV2(root, -3.5, -3.5, -3.5);                \
+    TF_CHECK_OK(root.status());                                          \
+    Graph* g = new Graph(OpRegistry::Global());                          \
+    TF_CHECK_OK(root.ToGraph(g));                                        \
+    test::Benchmark(#DEVICE, g, /*old_benchmark_api*/ false).Run(state); \
+  }                                                                      \
   BENCHMARK(BM_SIMPLE_QUAN_DEQUAN_##DEVICE);
 
 BM_SIMPLE_QUAN_DEQUAN(cpu);

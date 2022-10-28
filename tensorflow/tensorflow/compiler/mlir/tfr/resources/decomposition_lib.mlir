@@ -9,15 +9,15 @@
 
 tfr.func @tf__my_add_n(%values: !tfr.tensor_list,
                        %n: i64 {tfr.name="N"}) -> !tfr.tensor {
-  %index = constant 0 : index
-  %cst = constant 1 : i64
-  %eq = cmpi "eq", %n, %cst : i64
+  %index = arith.constant 0 : index
+  %cst = arith.constant 1 : i64
+  %eq = arith.cmpi eq, %n, %cst : i64
   %v1 = tfr.get_element %values[%index] : (!tfr.tensor_list, index) -> !tfr.tensor
   %res = scf.if %eq -> !tfr.tensor {
     scf.yield %v1 : !tfr.tensor
   } else {
-    %step = index_cast %cst : i64 to index
-    %end = index_cast %n : i64 to index
+    %step = arith.index_cast %cst : i64 to index
+    %end = arith.index_cast %n : i64 to index
     %reduce = scf.for %i = %step to %end step %step iter_args(%reduce_iter=%v1) -> !tfr.tensor {
       %v = tfr.get_element %values[%i] : (!tfr.tensor_list, index) -> !tfr.tensor
       %reduce_next =  tfr.call @tf__add(%reduce_iter, %v) : (!tfr.tensor, !tfr.tensor) -> !tfr.tensor
@@ -27,6 +27,8 @@ tfr.func @tf__my_add_n(%values: !tfr.tensor_list,
   }
   tfr.return %res : !tfr.tensor
 }
+
+tfr.func @tf__my_add_n_(!tfr.tensor_list<N,T>, i64 {tfr.name="N"}) -> !tfr.tensor attributes {N,T}
 
 // Translated from tf.compose Python function.
 tfr.func @tf__my_biased_dense(%input: !tfr.tensor, %weight: !tfr.tensor,
@@ -54,6 +56,9 @@ tfr.func @tf__my_biased_dense(%input: !tfr.tensor, %weight: !tfr.tensor,
   }
   tfr.return %res : !tfr.tensor
 }
+
+tfr.func @tf__my_biased_dense_(!tfr.tensor<T>, !tfr.tensor<T>, !tfr.tensor<T>,
+    !tfr.attr{tfr.name="act", tfr.default=""}) -> !tfr.tensor attributes {T}
 
 // This is a wong decomposition and used to verify that tf.Elu isn't decomposed
 // since its kernel has been registered.

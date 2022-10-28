@@ -2,7 +2,7 @@ load("//tensorflow:tensorflow.bzl", "cuda_py_test")
 
 package(
     default_visibility = ["//tensorflow:internal"],
-    licenses = ["notice"],  # Apache 2.0
+    licenses = ["notice"],
 )
 
 cuda_py_test(
@@ -10,7 +10,6 @@ cuda_py_test(
     size = "medium",
     srcs = ["gradient_checker_test.py"],
     python_version = "PY3",
-    tfrt_enabled = True,
     deps = [
         "//tensorflow/python:array_ops",
         "//tensorflow/python:client_testlib",

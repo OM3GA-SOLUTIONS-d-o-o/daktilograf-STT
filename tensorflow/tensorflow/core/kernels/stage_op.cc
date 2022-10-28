@@ -182,8 +182,8 @@ Status GetBuffer(OpKernelContext* ctx, const NodeDef& ndef, Buffer** buf) {
 
   // Lambda for creating the Staging Area
   auto create_fn = [&ndef](Buffer** ret) -> Status {
-    int64 capacity;
-    int64 memory_limit;
+    int64_t capacity;
+    int64_t memory_limit;
     TF_RETURN_IF_ERROR(GetNodeAttr(ndef, "capacity", &capacity));
     TF_RETURN_IF_ERROR(GetNodeAttr(ndef, "memory_limit", &memory_limit));
     *ret = new Buffer(capacity, memory_limit);
@@ -216,10 +216,7 @@ class StageOp : public OpKernel {
 };
 
 REGISTER_KERNEL_BUILDER(Name("Stage").Device(DEVICE_CPU), StageOp);
-#if (defined(GOOGLE_CUDA) && GOOGLE_CUDA) || \
-    (defined(TENSORFLOW_USE_ROCM) && TENSORFLOW_USE_ROCM)
-REGISTER_KERNEL_BUILDER(Name("Stage").Device(DEVICE_GPU), StageOp);
-#endif
+REGISTER_KERNEL_BUILDER(Name("Stage").Device(DEVICE_DEFAULT), StageOp);
 
 class UnstageOp : public OpKernel {
  public:
@@ -247,10 +244,7 @@ class UnstageOp : public OpKernel {
 };
 
 REGISTER_KERNEL_BUILDER(Name("Unstage").Device(DEVICE_CPU), UnstageOp);
-#if (defined(GOOGLE_CUDA) && GOOGLE_CUDA) || \
-    (defined(TENSORFLOW_USE_ROCM) && TENSORFLOW_USE_ROCM)
-REGISTER_KERNEL_BUILDER(Name("Unstage").Device(DEVICE_GPU), UnstageOp);
-#endif
+REGISTER_KERNEL_BUILDER(Name("Unstage").Device(DEVICE_DEFAULT), UnstageOp);
 
 class StagePeekOp : public OpKernel {
  public:
@@ -264,6 +258,8 @@ class StagePeekOp : public OpKernel {
     core::ScopedUnref scope(buf);
     Buffer::Tuple tuple;
 
+    OP_REQUIRES(ctx, TensorShapeUtils::IsScalar(ctx->input(0).shape()),
+                errors::InvalidArgument("index must be scalar"));
     std::size_t index = ctx->input(0).scalar<int>()();
 
     OP_REQUIRES_OK(ctx, buf->Peek(index, &tuple));
@@ -280,11 +276,8 @@ class StagePeekOp : public OpKernel {
 };
 
 REGISTER_KERNEL_BUILDER(Name("StagePeek").Device(DEVICE_CPU), StagePeekOp);
-#if (defined(GOOGLE_CUDA) && GOOGLE_CUDA) || \
-    (defined(TENSORFLOW_USE_ROCM) && TENSORFLOW_USE_ROCM)
 REGISTER_KERNEL_BUILDER(
-    Name("StagePeek").HostMemory("index").Device(DEVICE_GPU), StagePeekOp);
-#endif
+    Name("StagePeek").HostMemory("index").Device(DEVICE_DEFAULT), StagePeekOp);
 
 class StageSizeOp : public OpKernel {
  public:
@@ -307,11 +300,8 @@ class StageSizeOp : public OpKernel {
 };
 
 REGISTER_KERNEL_BUILDER(Name("StageSize").Device(DEVICE_CPU), StageSizeOp);
-#if (defined(GOOGLE_CUDA) && GOOGLE_CUDA) || \
-    (defined(TENSORFLOW_USE_ROCM) && TENSORFLOW_USE_ROCM)
-REGISTER_KERNEL_BUILDER(Name("StageSize").HostMemory("size").Device(DEVICE_GPU),
-                        StageSizeOp);
-#endif
+REGISTER_KERNEL_BUILDER(
+    Name("StageSize").HostMemory("size").Device(DEVICE_DEFAULT), StageSizeOp);
 
 class StageClearOp : public OpKernel {
  public:
@@ -329,9 +319,7 @@ class StageClearOp : public OpKernel {
 };
 
 REGISTER_KERNEL_BUILDER(Name("StageClear").Device(DEVICE_CPU), StageClearOp);
-#if (defined(GOOGLE_CUDA) && GOOGLE_CUDA) || \
-    (defined(TENSORFLOW_USE_ROCM) && TENSORFLOW_USE_ROCM)
-REGISTER_KERNEL_BUILDER(Name("StageClear").Device(DEVICE_GPU), StageClearOp);
-#endif
+REGISTER_KERNEL_BUILDER(Name("StageClear").Device(DEVICE_DEFAULT),
+                        StageClearOp);
 
 }  // namespace tensorflow

@@ -13,16 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import weakref
 
 from tensorflow.python.util.compat import collections_abc
 
 
-class _ObjectIdentityWrapper(object):
+# LINT.IfChange
+class _ObjectIdentityWrapper:
   """Wraps an object, mapping __eq__ on wrapper to "is" on wrapped.
 
   Since __eq__ is based on object identity, it's safe to also define __hash__
@@ -244,3 +241,4 @@ class ObjectIdentityWeakSet(ObjectIdentitySet):
         self.discard(key)
       else:
         yield unwrapped
+# LINT.ThenChange(//tensorflow/python/keras/utils/object_identity.py)

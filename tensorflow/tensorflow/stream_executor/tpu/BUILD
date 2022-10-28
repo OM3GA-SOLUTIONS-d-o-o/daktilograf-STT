@@ -5,9 +5,15 @@ load("//tensorflow/core/platform:rules_cc.bzl", "cc_library")
 package(
     default_visibility = [
         "//learning/brain/experimental/dtensor:__subpackages__",
+        "//tensorflow/compiler/jit:__subpackages__",
+        "//tensorflow/compiler/mlir:__subpackages__",
+        "//tensorflow/compiler/xla:__subpackages__",
+        "//tensorflow/compiler/xrt:__subpackages__",
+        "//tensorflow/core/profiler/internal/tpu:__subpackages__",
         "//tensorflow/core/tpu:__subpackages__",
+        "//tensorflow/dtensor:__subpackages__",
     ],
-    licenses = ["notice"],  # Apache 2.0
+    licenses = ["notice"],
 )
 
 cc_library(
@@ -18,7 +24,6 @@ cc_library(
     ],
     deps = [
         "//tensorflow/c:tf_attrtype",
-        "//tensorflow/c:tf_status",
         "//tensorflow/core/tpu:libtftpu_header",
         "//tensorflow/stream_executor:stream_executor_headers",
     ],
@@ -64,20 +69,12 @@ cc_library(
     hdrs = ["noncopyable_buffer.h"],
     visibility = ["//visibility:public"],
     deps = [
-        "//tensorflow/core:lib",
+        "//tensorflow/core/platform:logging",
+        "//tensorflow/core/platform:platform_port",
         "@com_google_absl//absl/base",
+        "@com_google_absl//absl/functional:function_ref",
         "@com_google_absl//absl/types:optional",
         "@com_google_absl//absl/types:span",
-    ],
-)
-
-cc_library(
-    name = "tpu_node_context_c_api_hdrs",
-    hdrs = ["tpu_node_context_c_api.h"],
-    visibility = ["//visibility:public"],
-    deps = [
-        ":c_api_decl",
-        "//tensorflow/core/tpu:libtftpu_header",
     ],
 )
 
@@ -133,6 +130,19 @@ cc_library(
 )
 
 cc_library(
+    name = "tpu_platform_hdr",
+    hdrs = ["tpu_platform.h"],
+    deps = [
+        ":tpu_executor_c_api_hdrs",
+        ":tpu_platform_interface",
+        "//tensorflow/core:framework_lite",
+        "//tensorflow/core:tflite_portable_logging",
+        "//tensorflow/stream_executor:stream_header",
+        "@com_google_absl//absl/container:flat_hash_map",
+    ],
+)
+
+cc_library(
     name = "tpu_executor_hdrs",
     hdrs = [
         "tpu_executor.h",
@@ -151,10 +161,17 @@ cc_library(
         ":tpu_topology_external",
         "//tensorflow/core:lib",
         "//tensorflow/core/tpu:tpu_api",
-        "//tensorflow/stream_executor",
+        "//tensorflow/stream_executor:stream_executor_headers",
         "//tensorflow/stream_executor/lib",
         "@com_google_absl//absl/container:flat_hash_map",
     ],
+)
+
+cc_library(
+    name = "tpu_platform_id",
+    srcs = ["tpu_platform_id.cc"],
+    hdrs = ["tpu_platform_id.h"],
+    deps = ["//tensorflow/stream_executor:stream_header"],
 )
 
 cc_library(
@@ -176,6 +193,7 @@ cc_library(
         ":status_helper",
         ":tpu_executor_c_api_hdrs",
         ":tpu_executor_interface",
+        ":tpu_platform_id",
         ":tpu_platform_interface",
         ":tpu_stream_interface",
         "//tensorflow/c:tf_status",
@@ -195,7 +213,6 @@ cc_library(
     deps = [
         ":status_helper",
         ":tpu_executor_c_api_hdrs",
-        ":tpu_node_context_c_api_hdrs",
         ":tpu_platform_interface",
         "//tensorflow/compiler/xla/service",
         "//tensorflow/compiler/xla/service:backend",
@@ -204,6 +221,7 @@ cc_library(
         "//tensorflow/core:framework",
         "//tensorflow/core:lib",
         "//tensorflow/core/tpu:tpu_api",
+        "//tensorflow/core/tpu:tpu_ops_c_api_hdrs",
         "//tensorflow/stream_executor:device_memory_allocator",
         "//tensorflow/stream_executor/lib",
         "@com_google_absl//absl/memory",
@@ -228,6 +246,7 @@ cc_library(
     visibility = ["//visibility:public"],
     deps = [
         ":tpu_executor",
+        ":tpu_platform_id",
         ":tpu_transfer_manager_base",
         "//tensorflow/compiler/xla/service:transfer_manager",
     ],
@@ -245,6 +264,7 @@ cc_library(
         ":status_helper",
         ":tpu_executor_base",
         ":tpu_executor_c_api_hdrs",
+        ":tpu_platform_id",
         ":tpu_transfer_manager_interface",
         "//tensorflow/compiler/xla:literal",
         "//tensorflow/compiler/xla:shape_util",
@@ -253,30 +273,14 @@ cc_library(
         "//tensorflow/compiler/xla/service:transfer_manager",
         "//tensorflow/core/tpu:tpu_api",
         "//tensorflow/stream_executor",
+        "@com_google_absl//absl/cleanup",
     ],
 )
 
 cc_library(
-    name = "tpu_computation_placer",
-    srcs = ["tpu_computation_placer.cc"],
-    hdrs = ["tpu_computation_placer.h"],
-    visibility = ["//visibility:public"],
-    deps = [
-        ":status_helper",
-        ":tpu_executor",
-        ":tpu_executor_c_api_hdrs",
-        ":tpu_topology_external",
-        "//tensorflow/compiler/xla:statusor",
-        "//tensorflow/compiler/xla/service:computation_placer",
-        "//tensorflow/core/tpu:tpu_api",
-    ],
-    alwayslink = True,
-)
-
-cc_library(
-    name = "tpu_executable",
-    srcs = ["tpu_executable.cc"],
-    hdrs = ["tpu_executable.h"],
+    name = "tpu_op_executable",
+    srcs = ["tpu_op_executable.cc"],
+    hdrs = ["tpu_op_executable.h"],
     deps = [
         ":c_api_conversions",
         ":proto_helper",
@@ -293,9 +297,7 @@ cc_library(
         "//tensorflow/compiler/xla/service:hlo",
         "//tensorflow/core:lib",
         "//tensorflow/core/tpu:tpu_api",
-        "//tensorflow/core/tpu/kernels:tpu_compile_c_api_hdrs",
-        "//tensorflow/core/tpu/kernels:tpu_execute_c_api_hdrs",
-        "//tensorflow/core/tpu/kernels:tpu_program_c_api_hdrs",
+        "//tensorflow/core/tpu:tpu_ops_c_api_hdrs",
         "//tensorflow/stream_executor",
         "@com_google_absl//absl/types:optional",
         "@com_google_absl//absl/types:span",
@@ -359,6 +361,22 @@ cc_library(
         "@com_google_absl//absl/algorithm:container",
         "@com_google_absl//absl/types:optional",
         "@com_google_absl//absl/types:span",
+    ],
+)
+
+cc_library(
+    name = "tpu_executable",
+    srcs = ["tpu_executable.cc"],
+    hdrs = ["tpu_executable.h"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":c_api_conversions",
+        ":status_helper",
+        ":tpu_executable_interface",
+        ":tpu_executor",
+        ":tpu_executor_c_api_hdrs",
+        "//tensorflow/core/tpu:tpu_executor_api",
+        "@com_google_absl//absl/cleanup",
     ],
 )
 

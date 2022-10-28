@@ -1,5 +1,0 @@
-#!/bin/bash --norc
-
-exec -a aarch64-linux-gnu-nm \
-    external/LinaroAarch64Gcc72/bin/aarch64-linux-gnu-nm \
-    "$@"

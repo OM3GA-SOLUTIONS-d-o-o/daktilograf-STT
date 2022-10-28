@@ -14,12 +14,11 @@
 # ==============================================================================
 """Helpers for working with signatures in tf.saved_model.save."""
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+from absl import logging
 
 from tensorflow.python.eager import def_function
 from tensorflow.python.eager import function as defun
+from tensorflow.python.framework import composite_tensor
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import tensor_spec
 from tensorflow.python.ops import resource_variable_ops
@@ -34,6 +33,8 @@ from tensorflow.python.util.compat import collections_abc
 
 DEFAULT_SIGNATURE_ATTR = "_default_save_signature"
 SIGNATURE_ATTRIBUTE_NAME = "signatures"
+# Max number of warnings to show if signature contains normalized input names.
+_NUM_DISPLAY_NORMALIZED_SIGNATURES = 5
 
 
 def _get_signature(function):
@@ -61,30 +62,53 @@ def _valid_signature(concrete_function):
 
 
 def _validate_inputs(concrete_function):
+  """Raises error if input type is tf.Variable."""
   if any(isinstance(inp, resource_variable_ops.VariableSpec)
          for inp in nest.flatten(
              concrete_function.structured_input_signature)):
-    raise ValueError(("Functions that expect tf.Variable inputs cannot be "
-                      "exported as signatures."))
+    raise ValueError(
+        f"Unable to serialize concrete_function '{concrete_function.name}'"
+        f"with tf.Variable input. Functions that expect tf.Variable "
+        "inputs cannot be exported as signatures.")
+
+
+def _get_signature_name_changes(concrete_function):
+  """Checks for user-specified signature input names that are normalized."""
+  # Map of {user-given name: normalized name} if the names are un-identical.
+  name_changes = {}
+  for signature_input_name, graph_input in zip(
+      concrete_function.function_def.signature.input_arg,
+      concrete_function.graph.inputs):
+    try:
+      user_specified_name = compat.as_str(
+          graph_input.op.get_attr("_user_specified_name"))
+      if signature_input_name.name != user_specified_name:
+        name_changes[user_specified_name] = signature_input_name.name
+    except ValueError:
+      # Signature input does not have a user-specified name.
+      pass
+  return name_changes
 
 
 def find_function_to_export(saveable_view):
   """Function to export, None if no suitable function was found."""
   # If the user did not specify signatures, check the root object for a function
   # that can be made into a signature.
-  functions = saveable_view.list_functions(saveable_view.root)
-  signature = functions.get(DEFAULT_SIGNATURE_ATTR, None)
-  if signature is not None:
-    return signature
+  children = saveable_view.list_children(saveable_view.root)
 
-  # TODO(andresp): Discuss removing this behaviour. It can lead to WTFs when a
-  # user decides to annotate more functions with tf.function and suddenly
+  # TODO(b/205014194): Discuss removing this behaviour. It can lead to WTFs when
+  # a user decides to annotate more functions with tf.function and suddenly
   # serving that model way later in the process stops working.
   possible_signatures = []
-  for function in functions.values():
-    concrete = _get_signature(function)
+  for name, child in children:
+    if not isinstance(child, (def_function.Function, defun.ConcreteFunction)):
+      continue
+    if name == DEFAULT_SIGNATURE_ATTR:
+      return child
+    concrete = _get_signature(child)
     if concrete is not None and _valid_signature(concrete):
       possible_signatures.append(concrete)
+
   if len(possible_signatures) == 1:
     single_function = possible_signatures[0]
     signature = _get_signature(single_function)
@@ -100,22 +124,31 @@ def canonicalize_signatures(signatures):
   if not isinstance(signatures, collections_abc.Mapping):
     signatures = {
         signature_constants.DEFAULT_SERVING_SIGNATURE_DEF_KEY: signatures}
+  num_normalized_signatures_counter = 0
   concrete_signatures = {}
   wrapped_functions = {}
   for signature_key, function in signatures.items():
     original_function = signature_function = _get_signature(function)
-
     if signature_function is None:
       raise ValueError(
-          ("Expected a TensorFlow function to generate a signature for, but "
-           "got {}. Only `tf.functions` with an input signature or "
-           "concrete functions can be used as a signature.").format(function))
+          "Expected a TensorFlow function for which to generate a signature, "
+          f"but got {function}. Only `tf.functions` with an input signature or "
+          "concrete functions can be used as a signature.")
 
     wrapped_functions[original_function] = signature_function = (
         wrapped_functions.get(original_function) or
         function_serialization.wrap_cached_variables(original_function))
     _validate_inputs(signature_function)
-
+    if num_normalized_signatures_counter < _NUM_DISPLAY_NORMALIZED_SIGNATURES:
+      signature_name_changes = _get_signature_name_changes(signature_function)
+      if signature_name_changes:
+        num_normalized_signatures_counter += 1
+        logging.warning(
+            "Function `%s` contains input name(s) %s with unsupported "
+            "characters which will be renamed to %s in the SavedModel.",
+            compat.as_str(signature_function.graph.name),
+            ", ".join(signature_name_changes.keys()),
+            ", ".join(signature_name_changes.values()))
     # Re-wrap the function so that it returns a dictionary of Tensors. This
     # matches the format of 1.x-style signatures.
     # pylint: disable=cell-var-from-loop
@@ -162,30 +195,32 @@ def canonicalize_signatures(signatures):
 
 
 def _normalize_outputs(outputs, function_name, signature_key):
-  """Construct an output dictionary from unnormalized function outputs."""
+  """Normalize outputs if necessary and check that they are tensors."""
   # Convert `outputs` to a dictionary (if it's not one already).
   if not isinstance(outputs, collections_abc.Mapping):
-    if not isinstance(outputs, collections_abc.Sequence):
-      outputs = [outputs]
-    outputs = {("output_{}".format(output_index)): output
-               for output_index, output
-               in enumerate(outputs)}
+    # Check if `outputs` is a namedtuple.
+    if hasattr(outputs, "_asdict"):
+      outputs = outputs._asdict()
+    else:
+      if not isinstance(outputs, collections_abc.Sequence):
+        outputs = [outputs]
+      outputs = {("output_{}".format(output_index)): output
+                 for output_index, output in enumerate(outputs)}
 
   # Check that the keys of `outputs` are strings and the values are Tensors.
   for key, value in outputs.items():
     if not isinstance(key, compat.bytes_or_text_types):
       raise ValueError(
-          ("Got a dictionary with a non-string key {!r} in the output of the "
-           "function {} used to generate the SavedModel signature {!r}.")
-          .format(key, compat.as_str_any(function_name), signature_key))
-    if not isinstance(value, ops.Tensor):
+          f"Got a dictionary with a non-string key {key!r} in the output of "
+          f"the function {compat.as_str_any(function_name)} used to generate "
+          f"the SavedModel signature {signature_key!r}.")
+    if not isinstance(value, (ops.Tensor, composite_tensor.CompositeTensor)):
       raise ValueError(
-          ("Got a non-Tensor value {!r} for key {!r} in the output of the "
-           "function {} used to generate the SavedModel signature {!r}. "
-           "Outputs for functions used as signatures must be a single Tensor, "
-           "a sequence of Tensors, or a dictionary from string to Tensor.")
-          .format(value, key, compat.as_str_any(function_name), signature_key))
-
+          f"Got a non-Tensor value {value!r} for key {key!r} in the output of "
+          f"the function {compat.as_str_any(function_name)} used to generate "
+          f"the SavedModel signature {signature_key!r}. "
+          "Outputs for functions used as signatures must be a single Tensor, "
+          "a sequence of Tensors, or a dictionary from string to Tensor.")
   return outputs
 
 
@@ -220,7 +255,10 @@ class _SignatureMap(collections_abc.Mapping, base.Trackable):
   def __repr__(self):
     return "_SignatureMap({})".format(self._signatures)
 
-  def _list_functions_for_serialization(self, unused_serialization_cache):
+  def _trackable_children(self, save_type=base.SaveType.CHECKPOINT, **kwargs):
+    if save_type != base.SaveType.SAVEDMODEL:
+      return {}
+
     return {
         key: value for key, value in self.items()
         if isinstance(value, (def_function.Function, defun.ConcreteFunction))
@@ -261,19 +299,17 @@ def create_signature_map(signatures):
   return signature_map
 
 
-def validate_saveable_view(saveable_view):
-  """Performs signature-related sanity checks on `saveable_view`."""
-  for name, dep in saveable_view.list_dependencies(
-      saveable_view.root):
+def validate_augmented_graph_view(augmented_graph_view):
+  """Performs signature-related sanity checks on `augmented_graph_view`."""
+  for name, dep in augmented_graph_view.list_children(
+      augmented_graph_view.root):
     if name == SIGNATURE_ATTRIBUTE_NAME:
       if not isinstance(dep, _SignatureMap):
         raise ValueError(
-            ("Exporting an object {} which has an attribute named "
-             "'{signatures}'. This is a reserved attribute used to store "
-             "SavedModel signatures in objects which come from "
-             "`tf.saved_model.load`. Delete this attribute "
-             "(e.g. 'del obj.{signatures}') before saving if this shadowing is "
-             "acceptable.").format(
-                 saveable_view.root,
-                 signatures=SIGNATURE_ATTRIBUTE_NAME))
+            f"Exporting an object {augmented_graph_view.root} which has an attribute "
+            f"named '{SIGNATURE_ATTRIBUTE_NAME}'. This is a reserved attribute "
+            "used to store SavedModel signatures in objects which come from "
+            "`tf.saved_model.load`. Delete this attribute "
+            f"(e.g. `del obj.{SIGNATURE_ATTRIBUTE_NAME}`) before saving if "
+            "this shadowing is acceptable.")
       break

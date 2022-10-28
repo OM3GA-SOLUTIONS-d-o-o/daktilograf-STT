@@ -504,7 +504,7 @@ TEST(GcsFileSystemTest, NewRandomAccessFile_WithLocationConstraintCaching) {
 
   string bucket = "gs://bucket/random_access.txt";
   string another_bucket = "gs://anotherbucket/random_access.txt";
-  // Multiple calls should only cause one request to the location api.
+  // Multiple calls should only cause one request to the location API.
   TF_EXPECT_OK(fs.NewRandomAccessFile(bucket, nullptr, &file));
   TF_EXPECT_OK(fs.NewRandomAccessFile(bucket, nullptr, &file));
 
@@ -780,7 +780,7 @@ TEST(GcsFileSystemTest, NewRandomAccessFile_WithBlockCache_MaxStaleness) {
   // this loop 10 times.  This shows that the underlying FileBlockCache persists
   // across file close/open boundaries.
   for (int i = 0; i < 10; i++) {
-    // Create two files. Since these files have the same name name and the max
+    // Create two files. Since these files have the same name and the max
     // staleness of the filesystem is > 0, they will share the same blocks.
     std::unique_ptr<RandomAccessFile> file1;
     std::unique_ptr<RandomAccessFile> file2;
@@ -989,7 +989,7 @@ TEST(GcsFileSystemTest, NewWritableFile) {
   TF_EXPECT_OK(
       fs.NewWritableFile("gs://bucket/path/writeable", nullptr, &wfile));
   TF_EXPECT_OK(wfile->Append("content1,"));
-  int64 pos;
+  int64_t pos;
   TF_EXPECT_OK(wfile->Tell(&pos));
   EXPECT_EQ(9, pos);
   TF_EXPECT_OK(wfile->Append("content2"));
@@ -1242,7 +1242,7 @@ TEST(GcsFileSystemTest, NewWritableFile_ResumeUploadAllAttemptsFail) {
   EXPECT_TRUE(
       absl::StrContains(status.error_message(),
                         "All 10 retry attempts failed. The last failure: "
-                        "Unavailable: important HTTP error 503"))
+                        "important HTTP error 503"))
       << status;
 }
 
@@ -1250,7 +1250,7 @@ TEST(GcsFileSystemTest, NewWritableFile_UploadReturns410) {
   std::vector<string> results;
   TF_EXPECT_OK(
       Env::Default()->GetMatchingPaths("/tmp/tmp_file_tensorflow*", &results));
-  const int64 tmp_files_before = results.size();
+  const int64_t tmp_files_before = results.size();
 
   std::vector<HttpRequest*> requests(
       {new FakeHttpRequest(
@@ -1307,7 +1307,7 @@ TEST(GcsFileSystemTest, NewWritableFile_UploadReturns410) {
     EXPECT_TRUE(
         absl::StrContains(status.error_message(),
                           "Upload to gs://bucket/path/writeable.txt failed, "
-                          "caused by: Not found: important HTTP error 410"))
+                          "caused by: important HTTP error 410"))
         << status;
     EXPECT_TRUE(
         absl::StrContains(status.error_message(),
@@ -3423,7 +3423,7 @@ TEST(GcsFileSystemTest, DeleteRecursively_Ok) {
       kTestTimeoutConfig, *kAllowedLocationsDefault,
       nullptr /* gcs additional header */, false /* compose append */);
 
-  int64 undeleted_files, undeleted_dirs;
+  int64_t undeleted_files, undeleted_dirs;
   TF_EXPECT_OK(fs.DeleteRecursively("gs://bucket/path", nullptr,
                                     &undeleted_files, &undeleted_dirs));
   EXPECT_EQ(0, undeleted_files);
@@ -3516,7 +3516,7 @@ TEST(GcsFileSystemTest, DeleteRecursively_DeletionErrors) {
       kTestTimeoutConfig, *kAllowedLocationsDefault,
       nullptr /* gcs additional header */, false /* compose append */);
 
-  int64 undeleted_files, undeleted_dirs;
+  int64_t undeleted_files, undeleted_dirs;
   TF_EXPECT_OK(fs.DeleteRecursively("gs://bucket/path", nullptr,
                                     &undeleted_files, &undeleted_dirs));
   EXPECT_EQ(1, undeleted_files);
@@ -3551,7 +3551,7 @@ TEST(GcsFileSystemTest, DeleteRecursively_NotAFolder) {
       kTestTimeoutConfig, *kAllowedLocationsDefault,
       nullptr /* gcs additional header */, false /* compose append */);
 
-  int64 undeleted_files, undeleted_dirs;
+  int64_t undeleted_files, undeleted_dirs;
   EXPECT_EQ(error::Code::NOT_FOUND,
             fs.DeleteRecursively("gs://bucket/path", nullptr, &undeleted_files,
                                  &undeleted_dirs)

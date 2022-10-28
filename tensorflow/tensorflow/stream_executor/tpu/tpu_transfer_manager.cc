@@ -17,6 +17,8 @@ limitations under the License.
 
 #include <utility>
 
+#include "absl/cleanup/cleanup.h"
+#include "tensorflow/compiler/xla/literal.h"
 #include "tensorflow/compiler/xla/shape_util.h"
 #include "tensorflow/compiler/xla/xla_data.pb.h"
 #include "tensorflow/core/tpu/tpu_api.h"
@@ -28,6 +30,7 @@ limitations under the License.
 #include "tensorflow/stream_executor/tpu/tpu_executor.h"
 #include "tensorflow/stream_executor/tpu/tpu_executor_c_api.h"
 #include "tensorflow/stream_executor/tpu/tpu_platform.h"
+#include "tensorflow/stream_executor/tpu/tpu_platform_id.h"
 
 namespace tensorflow {
 namespace tpu {
@@ -45,7 +48,7 @@ TpuTransferManager::~TpuTransferManager() {
 }
 
 stream_executor::Platform::Id TpuTransferManager::PlatformId() const {
-  return TpuPlatform::kId;
+  return GetTpuPlatformId();
 }
 
 xla::Shape TpuTransferManager::HostShapeToDeviceShape(
@@ -58,8 +61,8 @@ xla::Shape TpuTransferManager::HostShapeToDeviceShape(
   tpu::ExecutorApiFn()->TpuTransferManager_HostShapeToDeviceShapeFn(
       manager_, &c_host_shape, &c_device_shape);
   xla::Shape device_shape = ApiConverter::FromC(&c_device_shape);
-  ApiConverter::Free(&c_host_shape);
-  ApiConverter::Free(&c_device_shape);
+  ApiConverter::Destroy(&c_host_shape);
+  ApiConverter::Destroy(&c_device_shape);
   return device_shape;
 }
 
@@ -77,11 +80,11 @@ Status TpuTransferManager::TransferLiteralToDeviceAsync(
 
   tpu::ExecutorApiFn()->TpuTransferManager_TransferLiteralToDeviceAsyncFn(
       manager_,
-      TpuPlatform::GetRegisteredPlatform()->stream_map()->at(
+      TpuPlatform::GetRegisteredPlatform()->LookupStream(
           stream->implementation()),
       &c_literal, &c_device_buffer, status.c_status);
-  ApiConverter::Free(&c_device_buffer);
-  ApiConverter::Free(&c_literal);
+  ApiConverter::Destroy(&c_device_buffer);
+  ApiConverter::Destroy(&c_literal);
   return status.status();
 }
 
@@ -96,7 +99,7 @@ Status TpuTransferManager::TransferLiteralToInfeed(
   tpu::ExecutorApiFn()->TpuTransferManager_TransferLiteralToInfeedFn(
       manager_, tpu_executor->se_executor(), &c_literal, status.c_status);
 
-  ApiConverter::Free(&c_literal);
+  ApiConverter::Destroy(&c_literal);
 
   return status.status();
 }
@@ -114,9 +117,9 @@ Status TpuTransferManager::TransferBuffersToInfeed(
   buffers_array.reserve(buffers.size());
 
   for (int64_t i = 0; i < buffers.size(); ++i) {
-    buffers_array.push_back(
-        const_cast<unsigned int*>(buffers[i].const_data().data()));
-    buffers_size.push_back(buffers[i].const_data().size());
+    absl::Span<const uint32_t> span = buffers[i].const_data<uint32_t>();
+    buffers_array.push_back(const_cast<uint32_t*>(span.data()));
+    buffers_size.push_back(span.size());
   }
 
   tpu::ExecutorApiFn()->TpuTransferManager_TransferBuffersToInfeedFn(
@@ -126,22 +129,22 @@ Status TpuTransferManager::TransferBuffersToInfeed(
 }
 
 Status TpuTransferManager::TransferLiteralFromOutfeed(
-    stream_executor::StreamExecutor* executor, const xla::Shape& literal_shape,
+    stream_executor::StreamExecutor* executor,
     xla::MutableBorrowingLiteral literal) {
   StatusHelper status;
   XLA_Shape c_shape;
   XLA_Literal c_literal;
   auto* tpu_executor = static_cast<TpuExecutor*>(executor->implementation());
 
-  ApiConverter::ToC(literal_shape, &c_shape);
+  ApiConverter::ToC(literal.shape(), &c_shape);
   ApiConverter::ToC(literal, &c_literal);
 
   tpu::ExecutorApiFn()->TpuTransferManager_TransferLiteralFromOutfeedFn(
       manager_, tpu_executor->se_executor(), &c_shape, &c_literal,
       status.c_status);
 
-  ApiConverter::Free(&c_shape);
-  ApiConverter::Free(&c_literal);
+  ApiConverter::Destroy(&c_shape);
+  ApiConverter::Destroy(&c_literal);
 
   return status.status();
 }
@@ -163,11 +166,11 @@ Status TpuTransferManager::ResetDevices(
 
 struct TransferFromDeviceState {
   std::atomic<int64_t> remaining_transfers;
-  SE_Status* overall_status =
+  TF_Status* overall_status =
       tpu::ExecutorApiFn()->TpuStatus_NewFn();  // OK or the first error
   std::function<void(Status)> done;
 
-  void TransferFinished(SE_Status* status) {
+  void TransferFinished(TF_Status* status) {
     if (!tpu::ExecutorApiFn()->TpuStatus_OkFn(status) &&
         tpu::ExecutorApiFn()->TpuStatus_OkFn(overall_status)) {
       std::swap(overall_status, status);
@@ -182,7 +185,7 @@ struct TransferFromDeviceState {
   }
 };
 
-void TransferLiteralFromDeviceTrampoline(void* ctx, SE_Status* status) {
+void TransferLiteralFromDeviceTrampoline(void* ctx, TF_Status* status) {
   reinterpret_cast<TransferFromDeviceState*>(ctx)->TransferFinished(status);
 }
 
@@ -203,20 +206,20 @@ void TpuTransferManager::TransferLiteralFromDevice(
       TpuPlatform::GetRegisteredPlatform()->LookupStream(
           stream->implementation()),
       &c_device_buffer, &c_literal, TransferLiteralFromDeviceTrampoline, state);
-  ApiConverter::Free(&c_device_buffer);
-  ApiConverter::Free(&c_literal);
+  ApiConverter::Destroy(&c_device_buffer);
+  ApiConverter::Destroy(&c_literal);
 }
 
-int64 TpuTransferManager::GetByteSizeRequirement(
+int64_t TpuTransferManager::GetByteSizeRequirement(
     const xla::Shape& shape) const {
   XLA_Shape c_shape;
   ApiConverter::ToC(shape, &c_shape);
 
-  int64 size_in_bytes =
+  int64_t size_in_bytes =
       tpu::ExecutorApiFn()->TpuTransferManager_GetByteSizeRequirementFn(
           manager_, &c_shape);
 
-  ApiConverter::Free(&c_shape);
+  ApiConverter::Destroy(&c_shape);
   return size_in_bytes;
 }
 
@@ -229,13 +232,13 @@ StatusOr<xla::Shape> TpuTransferManager::ChooseCompactLayoutForShape(
   tpu::ExecutorApiFn()->TpuTransferManager_ChooseCompactLayoutForShapeFn(
       manager_, &c_host_shape, &c_output, status.c_status);
   // TODO(skyewm): use a scoped version of XLA_Shape
-  ApiConverter::Free(&c_host_shape);
+  ApiConverter::Destroy(&c_host_shape);
   if (!status.status().ok()) {
-    ApiConverter::Free(&c_output);
+    ApiConverter::Destroy(&c_output);
     return status.status();
   }
   xla::Shape output = ApiConverter::FromC(&c_output);
-  ApiConverter::Free(&c_output);
+  ApiConverter::Destroy(&c_output);
   return output;
 }
 
@@ -245,8 +248,8 @@ bool TpuTransferManager::CanShapedBufferBeAccessedNow(
   auto* tpu_executor = down_cast<TpuExecutor*>(executor->implementation());
   XLA_ShapedBuffer c_device_buffer;
   ApiConverter::ToC(device_buffer, &c_device_buffer);
-  auto cleanup = xla::MakeCleanup(
-      [&c_device_buffer]() { ApiConverter::Free(&c_device_buffer); });
+  auto cleanup = absl::MakeCleanup(
+      [&c_device_buffer]() { ApiConverter::Destroy(&c_device_buffer); });
   return tpu::ExecutorApiFn()
       ->TpuTransferManager_CanShapedBufferBeAccessedNowFn(
           manager_, tpu_executor->se_executor(), &c_device_buffer);
@@ -283,12 +286,12 @@ Status TpuTransferManager::WriteSingleTupleIndexTable(
 
   tpu::ExecutorApiFn()->TpuTransferManager_WriteSingleTupleIndexTableFn(
       manager_,
-      TpuPlatform::GetRegisteredPlatform()->stream_map()->at(
+      TpuPlatform::GetRegisteredPlatform()->LookupStream(
           stream->implementation()),
       elements_bases, elements.size(), &c_shape, &region_base, status.c_status);
 
   delete[] elements_bases;
-  ApiConverter::Free(&c_shape);
+  ApiConverter::Destroy(&c_shape);
   return status.status();
 }
 
@@ -309,15 +312,39 @@ Status TpuTransferManager::LinearizeToBuffers(
 
   for (int64_t i = 0; i < buffers_array_size; ++i) {
     tpu::NoncopyableBuffer buf(buffers_size[i]);
-    memcpy(buf.mutable_data().data(), buffers_array[i], buffers_size[i]);
+    memcpy(buf.mutable_data<uint8_t>().data(), buffers_array[i],
+           buffers_size[i]);
     buffers->push_back(std::move(buf));
   }
 
   tpu::ExecutorApiFn()->TpuTransferManager_FreeBuffersFn(
       buffers_array, buffers_size, buffers_array_size);
 
-  ApiConverter::Free(&c_literal);
+  ApiConverter::Destroy(&c_literal);
   return status.status();
+}
+
+Status TpuTransferManager::ReadDynamicShapes(se::Stream* stream,
+                                             xla::ShapedBuffer* device_buffer,
+                                             xla::Shape* device_shape) {
+  XLA_ShapedBuffer c_device_buffer;
+  XLA_Shape c_device_shape;
+  ApiConverter::ToC(*device_buffer, &c_device_buffer);
+  ApiConverter::ToC(*device_shape, &c_device_shape);
+  XLA_Shape c_updated_shape;
+  StatusHelper status;
+  ExecutorApiFn()->TpuTransferManager_ReadDynamicShapesFn(
+      TpuPlatform::GetRegisteredPlatform()->LookupStream(
+          stream->implementation()),
+      &c_device_buffer, c_device_shape, &c_updated_shape, status.c_status);
+  ApiConverter::Destroy(&c_device_buffer);
+  ApiConverter::Destroy(&c_device_shape);
+  if (!status.ok()) {
+    return status.status();
+  }
+  *device_shape = ApiConverter::FromC(&c_updated_shape);
+  ApiConverter::Destroy(&c_updated_shape);
+  return Status::OK();
 }
 
 }  // namespace tpu

@@ -14,10 +14,6 @@
 # ==============================================================================
 """Handles control flow statements: while, for, if."""
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import gast
 
 from tensorflow.python.autograph.core import converter
@@ -196,8 +192,8 @@ class ControlFlowTransformer(converter.Base):
     # it.
     input_only = basic_scope_vars & live_in - live_out
 
-    # Place the outputs first.
-    scope_vars = sorted(scope_vars, key=lambda v: v in input_only)
+    # Place the outputs first, then sort lexicographically.
+    scope_vars = sorted(scope_vars, key=lambda v: (v in input_only, v))
     nouts = len(scope_vars) - len(input_only)
 
     return scope_vars, undefined, nouts

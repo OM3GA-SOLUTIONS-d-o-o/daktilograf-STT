@@ -14,10 +14,6 @@
 # ==============================================================================
 """Experimental impl for GradientTape using unified APIs, for testing only."""
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 from tensorflow.python.framework.experimental import _tape
 from tensorflow.python.framework.experimental import context_stack
 from tensorflow.python.framework.experimental import gradient_registry
@@ -40,10 +36,9 @@ class GradientTape(object):
   # TODO(srbs): Add support for unconnected_gradients.
   def gradient(self, targets, sources, output_gradients=None):
     ctx = context_stack.get_default()
-    vspace = _tape.TapeVSpace(ctx)
     flat_targets = nest.flatten(targets)
     flat_sources = nest.flatten(sources)
-    out_grads = self._c_tape.ComputeGradient(vspace, flat_targets, flat_sources,
+    out_grads = self._c_tape.ComputeGradient(ctx, flat_targets, flat_sources,
                                              output_gradients or [])
     return nest.pack_sequence_as(sources, out_grads)
 

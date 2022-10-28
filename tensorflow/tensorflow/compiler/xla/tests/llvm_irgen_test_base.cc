@@ -47,7 +47,7 @@ void LlvmIrGenTestBase::ResetIrHook() {
 }
 
 void LlvmIrGenTestBase::CompileAndVerifyIr(
-    std::unique_ptr<HloModule> hlo_module, const string& pattern,
+    std::unique_ptr<HloModule> hlo_module, const std::string& pattern,
     bool match_optimized_ir) {
   SetIrHook(match_optimized_ir);
   Status status = CompileToExecutable(std::move(hlo_module)).status();
@@ -56,11 +56,11 @@ void LlvmIrGenTestBase::CompileAndVerifyIr(
 
   StatusOr<bool> filecheck_result = RunFileCheck(ir_, pattern);
   TF_ASSERT_OK(filecheck_result.status());
-  EXPECT_TRUE(filecheck_result.ValueOrDie());
+  EXPECT_TRUE(filecheck_result.ValueOrDie()) << "Full IR: " << ir_;
 }
 
-void LlvmIrGenTestBase::CompileAndVerifyIr(const string& hlo_text,
-                                           const string& expected_llvm_ir,
+void LlvmIrGenTestBase::CompileAndVerifyIr(const std::string& hlo_text,
+                                           const std::string& expected_llvm_ir,
                                            bool match_optimized_ir) {
   HloModuleConfig config;
   config.set_debug_options(GetDebugOptionsForTest());
@@ -71,7 +71,7 @@ void LlvmIrGenTestBase::CompileAndVerifyIr(const string& hlo_text,
 
 void LlvmIrGenTestBase::CompileAheadOfTimeAndVerifyIr(
     std::unique_ptr<HloModule> hlo_module, const AotCompilationOptions& options,
-    const string& pattern, bool match_optimized_ir) {
+    const std::string& pattern, bool match_optimized_ir) {
   SetIrHook(match_optimized_ir);
   Status status =
       CompileToAotCompilationResult(std::move(hlo_module), options).status();
@@ -80,7 +80,7 @@ void LlvmIrGenTestBase::CompileAheadOfTimeAndVerifyIr(
 
   StatusOr<bool> filecheck_result = RunFileCheck(ir_, pattern);
   ASSERT_TRUE(filecheck_result.ok());
-  EXPECT_TRUE(filecheck_result.ValueOrDie());
+  EXPECT_TRUE(filecheck_result.ValueOrDie()) << "Full IR: " << ir_;
 }
 
 void LlvmIrGenTestBase::MatchOptimizedHlo(absl::string_view hlo,
@@ -103,6 +103,13 @@ StatusOr<std::unique_ptr<HloModule>> LlvmIrGenTestBase::GetOptimizedModule(
       ParseAndReturnVerifiedModule(hlo, GetModuleConfigForTest()));
   return backend().compiler()->RunHloPasses(
       std::move(module), backend().default_stream_executor(),
+      backend().default_stream_executor()->GetAllocator());
+}
+
+StatusOr<std::unique_ptr<HloModule>> LlvmIrGenTestBase::GetOptimizedModule(
+    std::unique_ptr<HloModule> hlo_module) {
+  return backend().compiler()->RunHloPasses(
+      std::move(hlo_module), backend().default_stream_executor(),
       backend().default_stream_executor()->GetAllocator());
 }
 

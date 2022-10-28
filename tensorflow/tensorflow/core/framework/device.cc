@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "tensorflow/core/framework/device.h"
 
+#include "tensorflow/core/framework/device_factory.h"
 #include "tensorflow/core/framework/op_segment.h"
 #include "tensorflow/core/platform/errors.h"
 #include "tensorflow/core/platform/logging.h"
@@ -51,7 +52,28 @@ DeviceAttributes Device::BuildDeviceAttributes(
   da.set_memory_limit(memory_limit.value());
   *da.mutable_locality() = locality;
   da.set_physical_device_desc(physical_device_desc);
+  da.set_xla_global_id(-1);  // Unknown / not set
   return da;
+}
+
+bool Device::IsRemoteCallAllowed() const {
+  auto& type = parsed_name_.type;
+  if (type == "TPU") {
+    return true;
+  }
+  if (type == "TPU_SYSTEM") {
+    return true;
+  }
+  if (type == "CPU") {
+    return true;
+  }
+  if (type == "GPU") {
+    return true;
+  }
+  if (DeviceFactory::IsPluggableDevice(type)) {
+    return true;
+  }
+  return false;
 }
 
 }  // namespace tensorflow

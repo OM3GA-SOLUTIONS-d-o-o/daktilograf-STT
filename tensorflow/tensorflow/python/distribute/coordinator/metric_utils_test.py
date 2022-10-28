@@ -1,4 +1,3 @@
-# Lint as: python3
 # Copyright 2020 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,10 +13,6 @@
 # limitations under the License.
 # ==============================================================================
 """Tests for metrics collecting in coordinator."""
-
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 
 import time
 from tensorflow.python.distribute import multi_worker_test_base
@@ -58,7 +53,7 @@ class MetricUtilsTest(test.TestCase):
     result = cluster.schedule(func, args=None, kwargs=None)
     result = cluster.schedule(func, args=None, kwargs=None)
     cluster.join()
-    self.assertEqual(result._get_value().numpy(), 3)
+    self.assertEqual(result.fetch(), 3)
 
     # Tracing, closure execution, and remote_value fetching should be executed
     # exactly once for running this function.
