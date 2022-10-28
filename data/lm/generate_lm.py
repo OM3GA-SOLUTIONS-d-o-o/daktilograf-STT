@@ -6,10 +6,11 @@ import subprocess
 from collections import Counter
 
 import progressbar
+from clearml import Task
 
 
 def convert_and_filter_topk(args):
-    """ Convert to lowercase, count word occurrences and save top-k words to a file """
+    """Convert to lowercase, count word occurrences and save top-k words to a file"""
 
     counter = Counter()
     data_lower = os.path.join(args.output_dir, "lower.txt.gz")
@@ -130,7 +131,7 @@ def build_lm(args, data_lower, vocab_str):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Generate lm.binary and top-k vocab for Daktilograf STT."
+        description="Generate lm.binary and top-k vocab for Coqui STT."
     )
     parser.add_argument(
         "--input_txt",
@@ -194,11 +195,31 @@ def main():
         help="To try when such message is returned by kenlm: 'Could not calculate Kneser-Ney discounts [...] rerun with --discount_fallback'",
         action="store_true",
     )
-
+    parser.add_argument(
+        "--clearml_project",
+        required=False,
+        default="STT/wav2vec2 decoding",
+    )
+    parser.add_argument(
+        "--clearml_task",
+        required=False,
+        default="LM generation",
+    )
     args = parser.parse_args()
+    try:
+        task = Task.init(project_name=args.clearml_project, task_name=args.clearml_task)
+    except:
+        pass
 
     data_lower, vocab_str = convert_and_filter_topk(args)
     build_lm(args, data_lower, vocab_str)
+
+    try:
+        task.upload_artifact(
+            name="lm.binary", artifact_object=os.path.join(args.output_dir, "lm.binary")
+        )
+    except:
+        pass
 
     # Delete intermediate files
     os.remove(os.path.join(args.output_dir, "lower.txt.gz"))
