@@ -342,6 +342,7 @@ jobs:
         with:
           name: "libsox3_Linux"
           path: ${{ github.workspace }}/sox-build/
+      -run: chmod +x ./ci_scripts/tf-setup.sh
       - run: ./ci_scripts/tf-setup.sh
       - run: ./ci_scripts/host-build.sh
       - run: ./ci_scripts/package.sh

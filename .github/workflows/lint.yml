@@ -19,6 +19,7 @@ jobs:
       - name: Run training unittests
         run: |
           sudo apt-get install -y --no-install-recommends libopusfile0 libopus-dev libopusfile-dev
+          chmod +x ./ci_scripts/train-unittests.sh
           ./ci_scripts/train-unittests.sh
 
   pre-commit-checks:
