@@ -794,6 +794,10 @@ jobs:
           mv convert_graphdef_memmapped_format /tmp
       - run: |
           mkdir -p ${CI_ARTIFACTS_DIR} || true
+      - run: |
+          chmod +x ./ci_scripts/*.sh
+      - run: |
+          chmod +x ./bin/*.sh
       - name: Run basic training tests
         run: |
           set -ex
@@ -861,6 +865,10 @@ jobs:
       - run: |
           mkdir -p ${CI_ARTIFACTS_DIR} || true
       - run: |
+          chmod +x ./ci_scripts/*.sh
+      - run: |
+          chmod +x ./bin/*.sh
+      - run: |
           sudo apt-get install -y --no-install-recommends libopus0 libopusfile0 libvorbis-dev sox
       - name: Run tests
         run: |
@@ -916,6 +924,10 @@ jobs:
           mkdir -p ${CI_ARTIFACTS_DIR} || true
       - run: |
           sudo apt-get install -y --no-install-recommends libopus0 sox
+      - run: |
+          chmod +x ./ci_scripts/*.sh
+      - run: |
+          chmod +x ./bin/*.sh
       - name: Run tests
         run: |
           set -xe
@@ -960,6 +972,10 @@ jobs:
           mkdir -p ${CI_ARTIFACTS_DIR} || true
       - run: |
           sudo apt-get install -y --no-install-recommends libopus0 sox
+      - run: |
+          chmod +x ./ci_scripts/*.sh
+      - run: |
+          chmod +x ./bin/*.sh
       - name: Run tests
         run: |
           set -xe
@@ -1000,6 +1016,10 @@ jobs:
           mkdir -p ${CI_ARTIFACTS_DIR} || true
       - run: |
           sudo apt-get install -y --no-install-recommends libopus0 sox
+      - run: |
+          chmod +x ./ci_scripts/*.sh
+      - run: |
+          chmod +x ./bin/*.sh
       - name: Run tests
         run: |
           set -xe
@@ -1399,6 +1419,10 @@ jobs:
       - run: |
           python -m pip install -U pip setuptools wheel jupyter
           python -m pip install .
+      - run: |
+          chmod +x ./ci_scripts/*.sh
+      - run: |
+          chmod +x ./bin/*.sh
       - name: Run python notebooks
         run: |
           ./ci_scripts/notebook-tests.sh
@@ -1468,6 +1492,8 @@ jobs:
       - run: |
           curl -sSL https://github.com/coqui-ai/STT/releases/download/v0.10.0-alpha.7/pcre-8.43.tar.gz > pcre-8.43.tar.gz
         if: steps.swig-build-cache.outputs.cache-hit != 'true'
+      - run: |
+          chmod +x ./Tools/*.sh
       - run: |
           ./Tools/pcre-build.sh
         if: steps.swig-build-cache.outputs.cache-hit != 'true'
@@ -1557,6 +1583,8 @@ jobs:
           python -m pip install coqui_stt_ctcdecoder-*.whl
           DS_NODECODER=y python -m pip install --upgrade .
       - run: |
+          chmod +x ./bin/*.sh
+      - run: |
           # Easier to rename to that we can exercize the LDC93S1 importer code to
           # generate the CSV file.
           echo "Moving ${{ matrix.samplerate }} to LDC93S1.wav"
@@ -1638,6 +1666,8 @@ jobs:
           ln -s ~/arm-target/arm-brew/bin/pkg-config ~/arm-target/bin/arm-pkg-config
       - run: |
           echo "$HOME/arm-target/bin" >> $GITHUB_PATH
+      - run: |
+          chmod +x ./ci_scripts/*.sh
         if: matrix.arch == 'arm64'
       - run: ./ci_scripts/tf-setup.sh
       - name: Workaround problems with mixing headers from Xcode and CommandLineTools by removing the latter
@@ -1670,6 +1700,8 @@ jobs:
       - name: Select Xcode version
         run: |
           sudo xcode-select --switch /Applications/Xcode_13.1.app/Contents/Developer
+      - run: |
+          chmod +x ./ci_scripts/*.sh
       - run: ./ci_scripts/tf-setup.sh
       - name: Workaround problems with mixing headers from Xcode and CommandLineTools by removing the latter
         run: |
@@ -2106,6 +2138,8 @@ jobs:
         run: |
           rm -f /c/msys64/mingw64/clang-cl*
           rm -rf "/c/Program Files/LLVM"
+      - run: |
+          chmod +x ./ci_scripts/*.sh
       - run: ./ci_scripts/tf-setup.sh
       - run: ./ci_scripts/host-build.sh
       - run: ./ci_scripts/package.sh
@@ -2859,6 +2893,7 @@ jobs:
         uses: ./.github/actions/multistrap
         with:
           arch: armv7
+      - run: chmod +x ./ci_scripts/*.sh
       - run: ./ci_scripts/tf-setup.sh
       - run: ./ci_scripts/armv7-build.sh
       - run: ./ci_scripts/package.sh
@@ -2888,6 +2923,7 @@ jobs:
         uses: ./.github/actions/multistrap
         with:
           arch: aarch64
+      - run: chmod +x ./ci_scripts/*.sh
       - run: ./ci_scripts/tf-setup.sh
       - run: ./ci_scripts/aarch64-build.sh
       - run: ./ci_scripts/package.sh
@@ -3596,6 +3632,7 @@ jobs:
         with:
           distribution: "temurin"
           java-version: "8"
+      - run: chmod +x ./ci_scripts/*.sh
       - run: ./ci_scripts/tf-setup.sh --android-armv7
       - run: ./ci_scripts/tf-configure.sh --android
       - run: ./ci_scripts/android-armv7-build.sh
@@ -3619,6 +3656,7 @@ jobs:
         with:
           distribution: "temurin"
           java-version: "8"
+      - run: chmod +x ./ci_scripts/*.sh
       - run: ./ci_scripts/tf-setup.sh --android-arm64
       - run: ./ci_scripts/tf-configure.sh --android
       - run: ./ci_scripts/android-arm64-build.sh
@@ -3642,6 +3680,7 @@ jobs:
         with:
           distribution: "temurin"
           java-version: "8"
+      - run: chmod +x ./ci_scripts/*.sh
       - run: ./ci_scripts/tf-setup.sh --android-arm64
       - run: ./ci_scripts/tf-configure.sh --android
       - run: ./ci_scripts/android-x86_64-build.sh
