@@ -342,9 +342,11 @@ jobs:
         with:
           name: "libsox3_Linux"
           path: ${{ github.workspace }}/sox-build/
-      - run: chmod +x ./ci_scripts/tf-setup.sh
+      - run: chmod +x ./ci_scripts/*.sh
       - run: ./ci_scripts/tf-setup.sh
+      - run: chmod +x ./ci_scripts/host-build.sh
       - run: ./ci_scripts/host-build.sh
+      - run: chmod +x ./ci_scripts/package.sh
       - run: ./ci_scripts/package.sh
       - uses: actions/upload-artifact@v2
         with:
@@ -479,7 +481,9 @@ jobs:
           /opt/python/cp37-cp37m/bin/python -m venv /tmp/venv
           echo "/tmp/venv/bin" >> $GITHUB_PATH
       - run: ./ci_scripts/tf-setup.sh
+      - run: chmod +x ./ci_scripts/wasm-build.sh
       - run: ./ci_scripts/wasm-build.sh
+      - run: chmod +x ./ci_scripts/wasm-package.sh
       - run: ./ci_scripts/wasm-package.sh
       - run: BAZEL_WASM_EXTRA_FLAGS="--//native_client:wasm_emit=es6" ./ci_scripts/wasm-build.sh
       - run: make -C native_client/wasm clean pack
