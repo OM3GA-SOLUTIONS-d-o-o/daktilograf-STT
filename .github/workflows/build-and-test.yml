@@ -1666,7 +1666,6 @@ jobs:
           ln -s ~/arm-target/arm-brew/bin/pkg-config ~/arm-target/bin/arm-pkg-config
       - run: |
           echo "$HOME/arm-target/bin" >> $GITHUB_PATH
-      - run: |
           chmod +x ./ci_scripts/*.sh
         if: matrix.arch == 'arm64'
       - run: ./ci_scripts/tf-setup.sh
