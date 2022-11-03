@@ -1,4 +1,4 @@
-STT_REPO ?= https://github.com/coqui-ai/STT.git
+STT_REPO ?= https://github.com/OM3GA-SOLUTIONS-d-o-o/daktilograf-STT.git
 STT_SHA  ?= origin/main
 
 Dockerfile%: Dockerfile%.tmpl
