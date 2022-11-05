@@ -75,7 +75,7 @@ Najbrži način da koristite unapred obučeni Daktilograf STT model je pomoću 
    :maxdepth: 1
    :caption: Language Model
 
-   LANGUAGE_MODEL
+   Jezički_model
 
 .. include:: SUPPORT.rst
 
